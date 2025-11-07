@@ -1,31 +1,59 @@
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include "monitor.h"
+#include <iostream>
+#include <fstream>
+#include <sstream>
+#include <string>
+#include <cstdio>
+#include "monitor.hpp"
 
+int get_memory_usage(int pid, ProcStats& stats) {
+    std::string path = "/proc/" + std::to_string(pid) + "/status";
+    std::ifstream file(path);
+    if (!file.is_open()) return -1;
 
+    std::string line;
+    long rss_kb = 0, vsz_kb = 0, swap_kb = 0;
 
-
-// ---------------------------------------------------
-// 2) Coleta o uso de memória física (RSS) do processo
-// ----------------------------------------------------
-int get_memory_usage(int pid, ProcStats *stats) {
-    char path[64], line[256];                   // variáveis pra guardar caminho e linhas lidas
-    snprintf(path, sizeof(path), "/proc/%d/status", pid);  // monta o caminho do arquivo
-
-    FILE *f = fopen(path, "r");                 // abre o arquivo /proc/[pid]/status
-    if (!f) return -1;                          // se não abrir, retorna erro
-
-    // percorre o arquivo linha por linha
-    while (fgets(line, sizeof(line), f)) {
-        // procura pela linha que começa com "VmRSS:"
-        if (strncmp(line, "VmRSS:", 6) == 0) {
-            // extrai o número da linha e salva em stats->memory_rss
-            sscanf(line, "VmRSS: %ld", &stats->memory_rss);
-            break;  // achou o valor, pode sair do loop
-        }
+    while (std::getline(file, line)) {
+        if (line.rfind("VmRSS:", 0) == 0)
+            std::sscanf(line.c_str(), "VmRSS: %ld", &rss_kb);
+        else if (line.rfind("VmSize:", 0) == 0)
+            std::sscanf(line.c_str(), "VmSize: %ld", &vsz_kb);
+        else if (line.rfind("VmSwap:", 0) == 0)
+            std::sscanf(line.c_str(), "VmSwap: %ld", &swap_kb);
     }
+    file.close();
 
-    fclose(f);  // fecha o arquivo
-    return 0;   // sucesso
+    // Lê memória total do sistema
+    std::ifstream meminfo("/proc/meminfo");
+    if (!meminfo.is_open()) return -1;
+
+    long mem_total_kb = 0;
+    while (std::getline(meminfo, line)) {
+        if (line.rfind("MemTotal:", 0) == 0)
+            std::sscanf(line.c_str(), "MemTotal: %ld", &mem_total_kb);
+    }
+    meminfo.close();
+
+    // Lê page faults de /proc/[pid]/stat
+    path = "/proc/" + std::to_string(pid) + "/stat";
+    std::ifstream stat_file(path);
+    if (!stat_file.is_open()) return -1;
+
+    long minor_faults = 0, major_faults = 0;
+    std::string token;
+    for (int i = 0; i < 9; ++i) stat_file >> token;
+    stat_file >> minor_faults >> token >> major_faults;
+    stat_file.close();
+
+    // Calcula percentual de uso da memória
+    double mem_percent = mem_total_kb > 0 ? (rss_kb * 100.0) / mem_total_kb : 0.0;
+
+    stats.memory_rss = rss_kb;
+    stats.memory_vsz = vsz_kb;
+    stats.memory_swap = swap_kb;
+    stats.minor_faults = minor_faults;
+    stats.major_faults = major_faults;
+    stats.memory_percent = mem_percent;
+
+    return 0;
 }

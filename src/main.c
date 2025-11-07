@@ -1,57 +1,61 @@
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <unistd.h>
-#include <time.h>
-#include "monitor.h"
+#include <iostream>
+#include <iomanip>
+#include <string>
+#include <thread>
+#include <chrono>
+#include <ctime>
+#include "monitor.hpp"
 
-int main(int argc, char *argv[]) {
-    // Verifica se os parâmetros foram passados
+int main(int argc, char* argv[]) {
     if (argc < 4) {
-        printf("Uso: %s profile <PID> <intervalo_segundos>\n", argv[0]);
+        std::cerr << "Uso: " << argv[0] << " profile <PID> <intervalo_segundos>\n";
         return 1;
     }
 
-    // Verifica se o comando é "profile"
-    if (strcmp(argv[1], "profile") != 0) {
-        printf("Comando inválido! Use: profile\n");
+    std::string command = argv[1];
+    if (command != "profile") {
+        std::cerr << "Comando inválido! Use: profile\n";
         return 1;
     }
 
-    int pid = atoi(argv[2]);       // PID do processo
-    int intervalo = atoi(argv[3]); // Intervalo entre coletas
+    int pid = std::stoi(argv[2]);
+    int intervalo = std::stoi(argv[3]);
 
-    // Verifica se o processo existe
-    char path[64];
-    snprintf(path, sizeof(path), "/proc/%d", pid);
-    if (access(path, F_OK) != 0) {
-        printf("[ERRO] Processo %d não encontrado!\n", pid);
-        return 1;
-    }
+    std::cout << "Monitorando processo PID " << pid 
+              << " a cada " << intervalo << " segundos...\n";
+    std::cout << "Pressione Ctrl+C para parar.\n\n";
 
-    printf("Monitorando processo PID %d a cada %d segundos...\n", pid, intervalo);
-    printf("Pressione Ctrl+C para parar.\n\n");
+    ProcStats prev{}, curr{};
+    get_cpu_usage(pid, prev);
+    std::this_thread::sleep_for(std::chrono::seconds(intervalo));
 
-    ProcStats stats;
+    while (true) {
+        get_cpu_usage(pid, curr);
+        get_memory_usage(pid, curr);
 
-    while (1) {
-        // Coleta CPU e Memória
-        int cpu_ok = get_cpu_usage(pid, &stats);
-        int mem_ok = get_memory_usage(pid, &stats);
+        double cpu_percent = calculate_cpu_percent(prev, curr, intervalo);
 
-        if (cpu_ok == 0 && mem_ok == 0) {
-            time_t agora = time(NULL);
-            struct tm *tm_info = localtime(&agora);
-            char horario[32];
-            strftime(horario, sizeof(horario), "%H:%M:%S", tm_info);
+        // Obter hora atual
+        std::time_t t = std::time(nullptr);
+        std::tm* tm_info = std::localtime(&t);
+        char hora[9];
+        std::strftime(hora, sizeof(hora), "%H:%M:%S", tm_info);
 
-            printf("[%s] CPU: %.2f%% | Memória: %ld kB\n",
-                   horario, stats.cpu_usage, stats.memory_rss);
-        } else {
-            printf("[ERRO] Falha ao coletar dados do processo %d\n", pid);
-        }
+        // Saída formatada
+        std::cout << "[" << hora << "] "
+                  << std::fixed << std::setprecision(2)
+                  << "CPU: " << cpu_percent << "% | "
+                  << "Threads: " << curr.threads << " | "
+                  << "Ctx: " << curr.voluntary_ctxt << "/" << curr.nonvoluntary_ctxt << " | "
+                  << "Mem: " << curr.memory_percent << "% "
+                  << "(RSS: " << curr.memory_rss << " kB, "
+                  << "VSZ: " << curr.memory_vsz << " kB, "
+                  << "Swap: " << curr.memory_swap << " kB) | "
+                  << "Faults: " << curr.minor_faults << "/" << curr.major_faults
+                  << std::endl;
 
-        sleep(intervalo);
+        prev = curr;
+        std::this_thread::sleep_for(std::chrono::seconds(intervalo));
     }
 
     return 0;
