@@ -60,32 +60,45 @@ long long CGroupManager::parseLong(const std::string& str) const {
     }
 }
 
+
 std::unique_ptr<CGroupMetrics> CGroupManager::getSystemMetrics() const {
     auto metrics = std::make_unique<CGroupMetrics>();
     metrics->cgroup_version = detectCGroupVersion();
     
     if (metrics->cgroup_version == "v2") {
-        // LER CPU - v2
-        std::string cpu_stat = readFile("/sys/fs/cgroup/cpu.stat");
-        if (!cpu_stat.empty()) {
-            size_t pos = cpu_stat.find("usage_usec");
-            if (pos != std::string::npos) {
-                std::string usage_line = cpu_stat.substr(pos);
-                size_t start = usage_line.find(' ');
-                size_t end = usage_line.find('\n');
-                if (start != std::string::npos && end != std::string::npos) {
-                    std::string usage_str = usage_line.substr(start + 1, end - start - 1);
-                    metrics->cpu_usage_ns = parseLong(usage_str) * 1000;
+        // BUSCAR CPU
+        std::vector<std::string> cpu_paths = {
+            "/sys/fs/cgroup/cpu.stat",
+            "/sys/fs/cgroup/init.scope/cpu.stat",
+            "/sys/fs/cgroup/user.slice/cpu.stat",
+            "/sys/fs/cgroup/system.slice/cpu.stat"
+        };
+        
+        for (const auto& path : cpu_paths) {
+            if (fileExists(path)) {
+                std::string cpu_stat = readFile(path);
+                if (!cpu_stat.empty()) {
+                    size_t pos = cpu_stat.find("usage_usec");
+                    if (pos != std::string::npos) {
+                        std::string usage_line = cpu_stat.substr(pos);
+                        size_t start = usage_line.find(' ');
+                        size_t end = usage_line.find('\n');
+                        if (start != std::string::npos && end != std::string::npos) {
+                            std::string usage_str = usage_line.substr(start + 1, end - start - 1);
+                            metrics->cpu_usage_ns = parseLong(usage_str) * 1000;
+                            break;
+                        }
+                    }
                 }
             }
         }
         
-        // LER MEMÓRIA - v2
+        // BUSCAR MEMÓRIA
         std::vector<std::string> memory_paths = {
             "/sys/fs/cgroup/memory.current",
-            "/sys/fs/cgroup/memory/memory.current",
-            "/sys/fs/cgroup/memory.usage_in_bytes",
-            "/sys/fs/cgroup/memory/memory.usage_in_bytes"
+            "/sys/fs/cgroup/init.scope/memory.current",
+            "/sys/fs/cgroup/user.slice/memory.current",
+            "/sys/fs/cgroup/system.slice/memory.current"
         };
         
         for (const auto& path : memory_paths) {
@@ -96,17 +109,22 @@ std::unique_ptr<CGroupMetrics> CGroupManager::getSystemMetrics() const {
             }
         }
         
-        // LER LIMITE DE MEMÓRIA - v2
+        // BUSCAR LIMITE DE MEMÓRIA
         std::vector<std::string> memory_limit_paths = {
             "/sys/fs/cgroup/memory.max",
-            "/sys/fs/cgroup/memory/memory.max",
-            "/sys/fs/cgroup/memory/memory.limit_in_bytes"
+            "/sys/fs/cgroup/init.scope/memory.max",
+            "/sys/fs/cgroup/user.slice/memory.max",
+            "/sys/fs/cgroup/system.slice/memory.max"
         };
         
         for (const auto& path : memory_limit_paths) {
             if (fileExists(path)) {
                 std::string mem_limit = readFile(path);
-                metrics->memory_limit_bytes = parseLong(mem_limit);
+                if (mem_limit.find("max") != std::string::npos) {
+                    metrics->memory_limit_bytes = 0;
+                } else {
+                    metrics->memory_limit_bytes = parseLong(mem_limit);
+                }
                 if (metrics->memory_limit_bytes > 0) break;
             }
         }
