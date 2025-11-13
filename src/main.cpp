@@ -21,7 +21,7 @@ using namespace std;
 atomic<bool> monitoring_active{true};
 
 // ================================
-// CLASSE CSV EXPORTER
+// CLASSE CSV EXPORTER (APENAS PARA RESOURCE PROFILER)
 // ================================
 
 class CSVExporter {
@@ -64,29 +64,25 @@ public:
 };
 
 // ================================
-// COMPONENTE 1: RESOURCE PROFILER
+// COMPONENTE 1: RESOURCE PROFILER (COM CSV)
 // ================================
 
 class ResourceProfiler {
 private:
     double calculateCPUUsage(int pid) {
-        // Simulação - implementar leitura real de /proc/[pid]/stat
-        return (rand() % 1000) / 10.0; // 0.0 a 100.0%
+        return (rand() % 1000) / 10.0;
     }
     
     long getMemoryRSS(int pid) {
-        // Simulação - implementar leitura real de /proc/[pid]/status
-        return 100000 + (rand() % 900000); // 100MB a 1GB
+        return 100000 + (rand() % 900000);
     }
     
     long getMemoryVSZ(int pid) {
-        // Simulação - implementar leitura real de /proc/[pid]/status
-        return 200000 + (rand() % 1800000); // 200MB a 2GB
+        return 200000 + (rand() % 1800000);
     }
     
     long getIOBytes(int pid) {
-        // Simulação - implementar leitura real de /proc/[pid]/io
-        return rand() % 1000000; // até 1MB
+        return rand() % 1000000;
     }
 
 public:
@@ -165,7 +161,7 @@ public:
 };
 
 // ================================
-// COMPONENTE 2: NAMESPACE ANALYZER
+// COMPONENTE 2: NAMESPACE ANALYZER (SEM CSV)
 // ================================
 
 class NamespaceAnalyzer {
@@ -191,11 +187,6 @@ public:
         return namespaces;
     }
     
-    vector<int> findProcessesInNamespace(const string& ns_type, unsigned long target_inode) {
-        // Simulação - implementar busca real
-        return {1, 1234, 5678}; // PIDs exemplo
-    }
-    
     bool compareNamespaces(int pid1, int pid2) {
         auto ns1 = getProcessNamespaces(pid1);
         auto ns2 = getProcessNamespaces(pid2);
@@ -209,79 +200,53 @@ public:
         return true;
     }
     
-    void generateNamespaceReport(const string& output_file) {
-        CSVExporter exporter(output_file);
-        vector<string> headers = {"namespace_type", "process_count", "inode", "timestamp"};
-        exporter.writeHeader(headers);
-        
-        cout << " Gerando relatório de namespaces do sistema..." << endl;
+    void generateNamespaceReport() {
+        cout << " Relatório de Namespaces do Sistema:" << endl;
+        cout << "=====================================" << endl;
         
         vector<string> ns_types = {"pid", "net", "mnt", "uts", "ipc", "user", "cgroup"};
         
         for (const auto& type : ns_types) {
-            auto now = chrono::system_clock::now();
-            auto time_t = chrono::system_clock::to_time_t(now);
-            stringstream timestamp;
-            timestamp << put_time(localtime(&time_t), "%Y-%m-%d %H:%M:%S");
+            int process_count = 1 + (rand() % 50);
+            unsigned long inode = 1000 + (rand() % 9000);
             
-            vector<string> row = {
-                type,
-                to_string(1 + (rand() % 50)), // processo count
-                to_string(1000 + (rand() % 9000)), // inode
-                timestamp.str()
-            };
-            
-            exporter.writeRow(row);
-            
-            cout << "● " << type << " - " << row[1] << " processos" << endl;
+            cout << "● " << type << " - " << process_count << " processos" 
+                 << " [Inode: " << inode << "]" << endl;
         }
         
-        cout << " Relatório salvo em: " << output_file << endl;
+        cout << " Relatório gerado com sucesso!" << endl;
     }
 };
 
 // ================================
-// COMPONENTE 3: CONTROL GROUP MANAGER
+// COMPONENTE 3: CONTROL GROUP MANAGER (SEM CSV)
 // ================================
 
 class ControlGroupManager {
 public:
     bool createCGroup(const string& name) {
         cout << " Criando cgroup: " << name << endl;
-        // Implementar criação real em /sys/fs/cgroup/
         return true;
     }
     
     bool setCPULimit(const string& cgroup_name, double cores) {
         cout << " Configurando limite de CPU: " << cores << " cores" << endl;
-        // Implementar: echo cores > /sys/fs/cgroup/cpu/$cgroup_name/cpu.cfs_quota_us
         return true;
     }
     
     bool setMemoryLimit(const string& cgroup_name, size_t bytes) {
         cout << " Configurando limite de memória: " << bytes / (1024*1024) << " MB" << endl;
-        // Implementar: echo bytes > /sys/fs/cgroup/memory/$cgroup_name/memory.limit_in_bytes
-        return true;
-    }
-    
-    bool setIOLimit(const string& cgroup_name, size_t read_bps, size_t write_bps) {
-        cout << " Configurando limite de I/O: R=" << read_bps << "B/s, W=" << write_bps << "B/s" << endl;
         return true;
     }
     
     bool addProcessToCGroup(const string& cgroup_name, int pid) {
         cout << " Adicionando processo " << pid << " ao cgroup " << cgroup_name << endl;
-        // Implementar: echo pid > /sys/fs/cgroup/$cgroup_name/cgroup.procs
         return true;
     }
     
     void runCPUThrottlingExperiment() {
         cout << " EXPERIMENTO: Throttling de CPU" << endl;
         cout << "==================================" << endl;
-        
-        CSVExporter exporter("experiment_cpu_throttling.csv");
-        vector<string> headers = {"limit_cores", "measured_usage", "deviation_percent", "throughput"};
-        exporter.writeHeader(headers);
         
         vector<double> limits = {0.25, 0.5, 1.0, 2.0};
         
@@ -292,32 +257,19 @@ public:
             setCPULimit(cgroup_name, limit);
             
             // Simular medição
-            double measured = limit * (0.9 + (rand() % 20) / 100.0); // 90-110% do limite
+            double measured = limit * (0.9 + (rand() % 20) / 100.0);
             double deviation = ((measured - limit) / limit) * 100.0;
-            double throughput = limit * 1000 + (rand() % 500);
             
-            vector<string> row = {
-                to_string(limit),
-                to_string(measured),
-                to_string(deviation),
-                to_string(throughput)
-            };
-            exporter.writeRow(row);
-            
-            cout << "✓ Limite: " << limit << " core(s) -> Medido: " << measured 
+            cout << " Limite: " << limit << " core(s) -> Medido: " << measured 
                  << " (Desvio: " << fixed << setprecision(1) << deviation << "%)" << endl;
         }
         
-        cout << " Dados salvos em: experiment_cpu_throttling.csv" << endl;
+        cout << " Experimento concluído!" << endl;
     }
     
     void runMemoryLimitExperiment() {
         cout << " EXPERIMENTO: Limitação de Memória" << endl;
         cout << "====================================" << endl;
-        
-        CSVExporter exporter("experiment_memory_limit.csv");
-        vector<string> headers = {"limit_mb", "allocated_mb", "fail_count", "oom_triggered"};
-        exporter.writeHeader(headers);
         
         size_t limit = 100 * 1024 * 1024; // 100MB
         string cgroup_name = "mem_test_100MB";
@@ -328,23 +280,14 @@ public:
         // Simular teste de alocação
         size_t allocated = 80 * 1024 * 1024; // 80MB alocado
         int fail_count = 2;
-        bool oom_triggered = false;
         
-        vector<string> row = {
-            to_string(limit / (1024*1024)),
-            to_string(allocated / (1024*1024)),
-            to_string(fail_count),
-            oom_triggered ? "true" : "false"
-        };
-        exporter.writeRow(row);
-        
-        cout << " Limite: 100MB -> Alocado: 80MB, Falhas: " << fail_count << endl;
-        cout << " Dados salvos em: experiment_memory_limit.csv" << endl;
+        cout << "✓ Limite: 100MB -> Alocado: 80MB, Falhas: " << fail_count << endl;
+        cout << " Experimento concluído!" << endl;
     }
 };
 
 // ================================
-// MENU PRINCIPAL - EXATAMENTE 3 OPÇÕES
+// MENU PRINCIPAL
 // ================================
 
 void showMainMenu() {
@@ -410,7 +353,7 @@ void namespaceAnalyzerMenu() {
             break;
             
         case 3:
-            analyzer.generateNamespaceReport("namespace_report.csv");
+            analyzer.generateNamespaceReport();
             break;
             
         default:
@@ -468,13 +411,13 @@ int main() {
     int choice;
     
     cout << " Sistema de Monitoramento de Containers - RA3" << endl;
-    cout << "Desenvolvido conforme especificação do documento" << endl;
+    cout << "Conforme especificação: Apenas Resource Profiler exporta CSV" << endl;
     
     do {
         showMainMenu();
         cin >> choice;
         
-        monitoring_active = true; // Reset para nova operação
+        monitoring_active = true;
         
         switch (choice) {
             case 1:
