@@ -3,7 +3,7 @@
 #include <sstream>
 #include <string>
 #include <cstdio>
-#include "monitor.hpp"
+#include "../include/monitor.hpp"
 
 int get_memory_usage(int pid, ProcStats& stats) {
     std::string path = "/proc/" + std::to_string(pid) + "/status";
