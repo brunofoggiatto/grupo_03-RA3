@@ -15,6 +15,8 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
+#include <errno.h>
+#include <cstring>
 
 using namespace std;
 
@@ -69,19 +71,43 @@ public:
 
 class ResourceProfiler {
 private:
+    // Verifica se o PID existe no sistema
+    bool pidExists(int pid) {
+        string proc_path = "/proc/" + to_string(pid);
+        struct stat info;
+        return (stat(proc_path.c_str(), &info) == 0);
+    }
+    
+    // Verifica se temos permissão para acessar o processo
+    bool canAccessProcess(int pid) {
+        string stat_path = "/proc/" + to_string(pid) + "/stat";
+        
+        // Tenta abrir o arquivo stat do processo
+        ifstream file(stat_path);
+        if (!file.is_open()) {
+            return false;
+        }
+        file.close();
+        return true;
+    }
+    
     double calculateCPUUsage(int pid) {
+        // Simulação - na implementação real, leríamos /proc/[pid]/stat
         return (rand() % 1000) / 10.0;
     }
     
     long getMemoryRSS(int pid) {
+        // Simulação - na implementação real, leríamos /proc/[pid]/status
         return 100000 + (rand() % 900000);
     }
     
     long getMemoryVSZ(int pid) {
+        // Simulação - na implementação real, leríamos /proc/[pid]/status
         return 200000 + (rand() % 1800000);
     }
     
     long getIOBytes(int pid) {
+        // Simulação - na implementação real, leríamos /proc/[pid]/io
         return rand() % 1000000;
     }
 
@@ -95,7 +121,28 @@ public:
         int thread_count;
     };
     
+    // Valida se podemos monitorar o processo
+    bool validateProcessAccess(int pid) {
+        if (pid <= 0) {
+            throw invalid_argument("PID inválido: " + to_string(pid));
+        }
+        
+        if (!pidExists(pid)) {
+            throw runtime_error("Processo com PID " + to_string(pid) + " não existe");
+        }
+        
+        if (!canAccessProcess(pid)) {
+            throw runtime_error("Sem permissão para acessar o processo " + to_string(pid) + 
+                              " (execute como root ou com permissões adequadas)");
+        }
+        
+        return true;
+    }
+    
     ProcessMetrics collectMetrics(int pid) {
+        // Valida acesso antes de coletar métricas
+        validateProcessAccess(pid);
+        
         ProcessMetrics metrics;
         metrics.cpu_usage = calculateCPUUsage(pid);
         metrics.memory_rss = getMemoryRSS(pid);
@@ -107,6 +154,17 @@ public:
     }
     
     void monitorProcess(int pid, int interval_sec, const string& csv_filename) {
+        try {
+            // Validação inicial do processo
+            cout << " Validando acesso ao processo " << pid << "..." << endl;
+            validateProcessAccess(pid);
+            cout << "  Acesso validado com sucesso" << endl;
+            
+        } catch (const exception& e) {
+            cerr << "  Erro na validação: " << e.what() << endl;
+            return;
+        }
+        
         CSVExporter exporter(csv_filename);
         vector<string> headers = {
             "timestamp", "pid", "cpu_usage", "memory_rss", 
@@ -114,14 +172,20 @@ public:
         };
         exporter.writeHeader(headers);
         
-        cout << " Monitorando processo PID: " << pid << endl;
+        cout << "\n Monitorando processo PID: " << pid << endl;
         cout << "  Intervalo: " << interval_sec << " segundos" << endl;
-        cout << " Dados salvos em: " << csv_filename << endl;
-        cout << "Press Ctrl+C para parar..." << endl;
+        cout << "  Dados salvos em: " << csv_filename << endl;
+        cout << "  Pressione Ctrl+C para parar..." << endl;
+        cout << "------------------------------------------" << endl;
         
         int iteration = 0;
         while (monitoring_active && iteration < 100) {
             try {
+                // Revalida periodicamente (processo pode terminar)
+                if (!pidExists(pid)) {
+                    throw runtime_error("Processo " + to_string(pid) + " não existe mais");
+                }
+                
                 auto metrics = collectMetrics(pid);
                 auto now = chrono::system_clock::now();
                 auto time_t = chrono::system_clock::to_time_t(now);
@@ -142,21 +206,34 @@ public:
                 exporter.writeRow(row);
                 
                 cout << "[" << timestamp.str() << "] "
-                     << "CPU: " << metrics.cpu_usage << "%, "
-                     << "Mem: " << metrics.memory_rss << "KB, "
-                     << "IO: " << metrics.io_read_bytes << "B"
+                     << "CPU: " << setw(5) << metrics.cpu_usage << "%, "
+                     << "Mem: " << setw(7) << metrics.memory_rss << "KB, "
+                     << "IO: " << setw(7) << metrics.io_read_bytes << "B"
+                     << " [Iteração: " << iteration + 1 << "]"
                      << endl;
                      
                 this_thread::sleep_for(chrono::seconds(interval_sec));
                 iteration++;
                 
             } catch (const exception& e) {
-                cerr << " Erro: " << e.what() << endl;
-                break;
+                cerr << "  Erro na iteração " << iteration + 1 << ": " << e.what() << endl;
+                
+                // Se o processo não existe mais, para o monitoramento
+                if (string(e.what()).find("não existe") != string::npos) {
+                    break;
+                }
+                
+                // Para outros erros, espera um pouco e tenta continuar
+                this_thread::sleep_for(chrono::seconds(2));
             }
         }
         
-        cout << " Monitoramento concluído. " << iteration << " iterações." << endl;
+        if (iteration > 0) {
+            cout << "------------------------------------------" << endl;
+            cout << " Monitoramento concluído. " << iteration << " iterações realizadas." << endl;
+        } else {
+            cout << " Monitoramento interrompido sem coletar dados." << endl;
+        }
     }
 };
 
@@ -281,7 +358,7 @@ public:
         size_t allocated = 80 * 1024 * 1024; // 80MB alocado
         int fail_count = 2;
         
-        cout << "✓ Limite: 100MB -> Alocado: 80MB, Falhas: " << fail_count << endl;
+        cout << " Limite: 100MB -> Alocado: 80MB, Falhas: " << fail_count << endl;
         cout << " Experimento concluído!" << endl;
     }
 };
@@ -308,9 +385,22 @@ void resourceProfilerMenu() {
     
     cout << "\n=== RESOURCE PROFILER ===" << endl;
     cout << "Digite o PID para monitorar: ";
-    cin >> pid;
+    
+    if (!(cin >> pid)) {
+        cout << "  Erro: PID deve ser um número inteiro!" << endl;
+        cin.clear();
+        cin.ignore(10000, '\n');
+        return;
+    }
+    
     cout << "Digite o intervalo em segundos: ";
-    cin >> interval;
+    
+    if (!(cin >> interval) || interval <= 0) {
+        cout << "  Erro: Intervalo deve ser um número positivo!" << endl;
+        cin.clear();
+        cin.ignore(10000, '\n');
+        return;
+    }
     
     string filename = "monitoring_pid_" + to_string(pid) + ".csv";
     profiler.monitorProcess(pid, interval, filename);
@@ -357,7 +447,7 @@ void namespaceAnalyzerMenu() {
             break;
             
         default:
-            cout << " Opção inválida!" << endl;
+            cout << "  Opção inválida!" << endl;
     }
 }
 
@@ -391,17 +481,18 @@ void controlGroupManagerMenu() {
                 cin >> pid;
                 cgroup_mgr.createCGroup(name);
                 cgroup_mgr.addProcessToCGroup(name, pid);
-                cout << " Cgroup criado e processo adicionado!" << endl;
+                cout << "  Cgroup criado e processo adicionado!" << endl;
             }
             break;
             
         default:
-            cout << " Opção inválida!" << endl;
+            cout << "  Opção inválida!" << endl;
     }
 }
 
 void signal_handler(int signal) {
     monitoring_active = false;
+    cout << "\n   Recebido sinal de interrupção. Parando monitoramento..." << endl;
 }
 
 int main() {
@@ -411,7 +502,8 @@ int main() {
     int choice;
     
     cout << " Sistema de Monitoramento de Containers - RA3" << endl;
-    cout << "Conforme especificação: Apenas Resource Profiler exporta CSV" << endl;
+    cout << " Com tratamento de erros para PID inexistente e permissões" << endl;
+    cout << " ===============================================" << endl;
     
     do {
         showMainMenu();
@@ -437,7 +529,7 @@ int main() {
                 break;
                 
             default:
-                cout << " Opção inválida!" << endl;
+                cout << "  Opção inválida!" << endl;
                 break;
         }
         
