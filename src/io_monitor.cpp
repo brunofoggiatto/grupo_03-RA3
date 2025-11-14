@@ -4,7 +4,7 @@
 #include <string>
 #include <algorithm>
 #include <unistd.h>
-#include "monitor.hpp"
+#include "../include/monitor.hpp"
 
 // Coleta de métricas de I/O (leitura e escrita em disco) e Rede (bytes RX/TX)
 

@@ -3,7 +3,7 @@
 #include <sstream>
 #include <string>
 #include <unistd.h>
-#include "monitor.hpp"
+#include "../include/monitor.hpp"
 
 // Lê dados de CPU de um PID específico
 int get_cpu_usage(int pid, ProcStats& stats) {
