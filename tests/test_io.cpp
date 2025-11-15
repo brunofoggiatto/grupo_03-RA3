@@ -1,6 +1,7 @@
 #include <fstream>
 #include <iostream>
 #include <vector>
+#include <unistd.h>
 #include <chrono>
 
 int main() {
@@ -14,6 +15,8 @@ int main() {
     for (size_t i = 0; i < size / data.size(); ++i)
         out.write(data.data(), data.size());
     out.close();
+    
+    sync();
 
     // Leitura
     std::ifstream in("teste_io.tmp", std::ios::binary);
@@ -23,8 +26,8 @@ int main() {
 
     auto end = std::chrono::steady_clock::now();
     std::cout << "Tempo total: "
-              << std::chrono::duration_cast<std::chrono::seconds>(end - start).count()
-              << " segundos.\n";
+              << std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count()
+              << " milissegundos.\n";
     std::cout << "Teste de I/O concluído." << std::endl;
 
     std::remove("teste_io.tmp");
