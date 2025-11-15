@@ -87,4 +87,85 @@ Ferramenta para manipulação de cgroups.
 
 ---
 
+## Requisitos e Dependências
+
+- **Sistema Operacional**: Ubuntu 24.04 LTS ou superior
+- **Kernel**: Linux 6.x+ com suporte a namespaces e cgroups
+- **Compilador**: GCC 13+ com suporte a C++23
+- **Ferramentas**: Make, sudo (para alguns experimentos)
+- **Bibliotecas**: libc padrão (sem dependências externas)
+
+---
+
+## Instruções de Compilação
+
+### Compilar todos os componentes
+```bash
+make all
+```
+
+### Namespace Analyzer (Aluno C)
+```bash
+# Testes funcionais
+g++ -std=c++23 -Wall -Wextra -o experimento2_test_namespaces \
+    tests/experimento2_test_namespaces.cpp src/namespace_analyzer.cpp
+
+# Benchmark de overhead
+g++ -std=c++23 -Wall -Wextra -o experimento2_benchmark_namespaces \
+    tests/experimento2_benchmark_namespaces.cpp src/namespace_analyzer.cpp
+```
+
+### Limpar
+```bash
+make clean
+```
+
+---
+
+## Instruções de Uso com Exemplos
+
+### Namespace Analyzer
+
+**Testes funcionais:**
+```bash
+./experimento2_test_namespaces
+```
+
+Saída: Lista namespaces do processo, encontra processos compartilhando namespaces, compara processos, gera relatórios CSV/JSON.
+
+**Benchmark de overhead:**
+```bash
+sudo ./experimento2_benchmark_namespaces
+```
+
+Mede tempo de criação de cada tipo de namespace em 200 iterações. Gera `experimento2_benchmark_results.csv` com estatísticas.
+
+---
+
+## Experimentos Realizados
+
+### Experimento 1: Overhead de Monitoramento
+- **Objetivo**: Medir o impacto do próprio profiler no sistema
+- **Metodologia**: Executar workload de referência com e sem monitoramento em diferentes intervalos
+- **Métricas**: Tempo de execução, CPU overhead, latência de sampling
+- **Documentação completa**: `docs/experiments/experimento1_overhead.md`
+
+### Experimento 2: Isolamento via Namespaces (Aluno 3)
+- **Objetivo**: Validar efetividade do isolamento e medir overhead de criação
+- **Metodologia**: 200 iterações, medição apenas da syscall unshare()
+- **Resultados**: UTS/CGROUP (~18µs), NET (~1652µs - 90x mais lento)
+- **Documentação completa**: `docs/experiments/experimento2_namespaces.md`
+
+---
+
+## Autores e Contribuições
+
+**Aluno 3** - Namespace Analyzer + Experimento 2
+- Implementação: `src/namespace_analyzer.cpp` (290 linhas)
+- Testes: `tests/experimento2_test_namespaces.cpp`
+- Benchmark: `tests/experimento2_benchmark_namespaces.cpp` (300 linhas)
+- Experimento 2 com metodologia científica validada em literatura
+- Documentação: `docs/experiments/experimento2_namespaces.md`
+
+---
 

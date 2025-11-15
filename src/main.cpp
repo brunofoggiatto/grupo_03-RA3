@@ -17,6 +17,7 @@
 #include <fcntl.h>
 #include <errno.h>
 #include <cstring>
+#include "../include/namespace.hpp"
 
 using namespace std;
 
@@ -238,62 +239,9 @@ public:
 };
 
 // ================================
-// COMPONENTE 2: NAMESPACE ANALYZER (SEM CSV)
+// COMPONENTE 2: NAMESPACE ANALYZER (USANDO IMPLEMENTAÇÃO REAL)
 // ================================
-
-class NamespaceAnalyzer {
-public:
-    struct NamespaceInfo {
-        string type;
-        unsigned long inode;
-        string ns_id;
-    };
-    
-    vector<NamespaceInfo> getProcessNamespaces(int pid) {
-        vector<NamespaceInfo> namespaces;
-        vector<string> ns_types = {"pid", "net", "mnt", "uts", "ipc", "user", "cgroup"};
-        
-        for (const auto& type : ns_types) {
-            NamespaceInfo ns;
-            ns.type = type;
-            ns.inode = 1000 + (rand() % 9000);
-            ns.ns_id = to_string(rand() % 1000);
-            namespaces.push_back(ns);
-        }
-        
-        return namespaces;
-    }
-    
-    bool compareNamespaces(int pid1, int pid2) {
-        auto ns1 = getProcessNamespaces(pid1);
-        auto ns2 = getProcessNamespaces(pid2);
-        
-        if (ns1.size() != ns2.size()) return false;
-        
-        for (size_t i = 0; i < ns1.size(); ++i) {
-            if (ns1[i].inode != ns2[i].inode) return false;
-        }
-        
-        return true;
-    }
-    
-    void generateNamespaceReport() {
-        cout << " Relatório de Namespaces do Sistema:" << endl;
-        cout << "=====================================" << endl;
-        
-        vector<string> ns_types = {"pid", "net", "mnt", "uts", "ipc", "user", "cgroup"};
-        
-        for (const auto& type : ns_types) {
-            int process_count = 1 + (rand() % 50);
-            unsigned long inode = 1000 + (rand() % 9000);
-            
-            cout << "● " << type << " - " << process_count << " processos" 
-                 << " [Inode: " << inode << "]" << endl;
-        }
-        
-        cout << " Relatório gerado com sucesso!" << endl;
-    }
-};
+// A implementação real está em src/namespace_analyzer.cpp
 
 // ================================
 // COMPONENTE 3: CONTROL GROUP MANAGER (SEM CSV)
@@ -407,45 +355,107 @@ void resourceProfilerMenu() {
 }
 
 void namespaceAnalyzerMenu() {
-    NamespaceAnalyzer analyzer;
     int choice, pid, pid1, pid2;
-    
+
     cout << "\n=== NAMESPACE ANALYZER ===" << endl;
     cout << "1. Listar namespaces de um processo" << endl;
     cout << "2. Comparar namespaces entre processos" << endl;
-    cout << "3. Gerar relatório do sistema" << endl;
+    cout << "3. Gerar relatório do sistema (CSV)" << endl;
+    cout << "4. Gerar relatório do sistema (JSON)" << endl;
     cout << "Escolha: ";
     cin >> choice;
-    
+
     switch (choice) {
         case 1:
             cout << "Digite o PID: ";
             cin >> pid;
             {
-                auto namespaces = analyzer.getProcessNamespaces(pid);
-                cout << "\n Namespaces do processo " << pid << ":" << endl;
-                for (const auto& ns : namespaces) {
-                    cout << "● " << ns.type << " - Inode: " << ns.inode << " (ID: " << ns.ns_id << ")" << endl;
+                auto proc_ns = list_process_namespaces(pid);
+                if (proc_ns) {
+                    print_process_namespaces(*proc_ns);
+                } else {
+                    cout << "  Erro: Não foi possível acessar o processo " << pid << endl;
                 }
             }
             break;
-            
+
         case 2:
             cout << "Digite o primeiro PID: ";
             cin >> pid1;
             cout << "Digite o segundo PID: ";
             cin >> pid2;
             {
-                bool same = analyzer.compareNamespaces(pid1, pid2);
-                cout << "\n Comparação: PID " << pid1 << " vs PID " << pid2 << endl;
-                cout << "Resultado: " << (same ? " MESMOS namespaces" : " DIFERENTES namespaces") << endl;
+                auto comparison = compare_namespaces(pid1, pid2);
+                if (comparison) {
+                    cout << "\n========================================" << endl;
+                    cout << " COMPARAÇÃO DE NAMESPACES" << endl;
+                    cout << " PID " << pid1 << " vs PID " << pid2 << endl;
+                    cout << "========================================" << endl;
+
+                    cout << "Total de namespaces verificados: " << comparison->total_namespaces << endl;
+                    cout << "Namespaces compartilhados: " << comparison->shared_namespaces << endl;
+                    cout << "Namespaces diferentes: " << comparison->different_namespaces << endl;
+
+                    if (comparison->different_namespaces > 0) {
+                        cout << "\nNamespaces que diferem:" << endl;
+
+                        // Pegar os namespaces de ambos os processos para mostrar os inodes
+                        auto proc1 = list_process_namespaces(pid1);
+                        auto proc2 = list_process_namespaces(pid2);
+
+                        for (const auto& diff_type : comparison->differences) {
+                            string ns_name = namespace_type_to_string(diff_type);
+                            cout << "  ✗ " << ns_name << endl;
+
+                            // Encontrar os inodes específicos
+                            if (proc1 && proc2) {
+                                for (const auto& ns1 : proc1->namespaces) {
+                                    if (ns1.type == diff_type && ns1.exists) {
+                                        cout << "     PID " << pid1 << ": inode " << ns1.inode << endl;
+                                        break;
+                                    }
+                                }
+                                for (const auto& ns2 : proc2->namespaces) {
+                                    if (ns2.type == diff_type && ns2.exists) {
+                                        cout << "     PID " << pid2 << ": inode " << ns2.inode << endl;
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+                    } else {
+                        cout << "\n RESULTADO: Todos os namespaces são IDÊNTICOS" << endl;
+                    }
+
+                    cout << "========================================" << endl;
+                } else {
+                    cout << "  Erro: Não foi possível comparar os processos" << endl;
+                }
             }
             break;
-            
+
         case 3:
-            analyzer.generateNamespaceReport();
+            {
+                string filename = "namespace_report.csv";
+                if (generate_namespace_report(filename, "csv")) {
+                    cout << " Relatório CSV gerado com sucesso: " << filename << endl;
+                } else {
+                    cout << "  Erro ao gerar relatório CSV" << endl;
+                }
+            }
             break;
-            
+
+        case 4:
+            {
+                string filename = "namespace_report.json";
+                if (generate_namespace_report(filename, "json")) {
+                    cout << " Relatório JSON gerado com sucesso: " << filename << endl;
+                } else {
+                    cout << "  Erro ao gerar relatório JSON" << endl;
+                }
+            }
+            break;
+
         default:
             cout << "  Opção inválida!" << endl;
     }
