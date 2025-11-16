@@ -1,4 +1,3 @@
-#define _GNU_SOURCE
 #include "../include/namespace.hpp"
 #include <iostream>
 #include <fstream>
@@ -68,7 +67,8 @@ double test_namespace_creation(int ns_flag) {
         clock_gettime(CLOCK_MONOTONIC, &end);
 
         double time_us = get_time_us(start, end);
-        write(pipefd[1], &time_us, sizeof(time_us));
+        ssize_t bytes_written = write(pipefd[1], &time_us, sizeof(time_us));
+        (void)bytes_written;
         close(pipefd[1]);
         _exit(0);
     } else if (pid > 0) {
@@ -76,7 +76,8 @@ double test_namespace_creation(int ns_flag) {
         close(pipefd[1]); // fecha escrita
 
         double time_us;
-        read(pipefd[0], &time_us, sizeof(time_us));
+        ssize_t bytes_read = read(pipefd[0], &time_us, sizeof(time_us));
+        (void)bytes_read;
         close(pipefd[0]);
 
         waitpid(pid, nullptr, 0);
