@@ -1,5 +1,5 @@
 # ============================================================
-# MAKEFILE - RESOURCE MONITOR RA3
+# MAKEFILE - RESOURCE MONITOR RA3 (CORRIGIDO)
 # ============================================================
 
 # Compilador e flags
@@ -14,7 +14,7 @@ TEST_DIR = tests
 BUILD_DIR = build
 BIN_DIR = bin
 
-# Arquivos fonte dos componentes
+# Arquivos fonte dos componentes EXISTENTES
 CPU_MONITOR_SRC = $(SRC_DIR)/cpu_monitor.cpp
 MEMORY_MONITOR_SRC = $(SRC_DIR)/memory_monitor.cpp
 IO_MONITOR_SRC = $(SRC_DIR)/io_monitor.cpp
@@ -30,7 +30,7 @@ NAMESPACE_ANALYZER_OBJ = $(BUILD_DIR)/namespace_analyzer.o
 CGROUP_MANAGER_OBJ = $(BUILD_DIR)/cgroup_manager.o
 MAIN_OBJ = $(BUILD_DIR)/main.o
 
-# Todos os objetos
+# Todos os objetos (SEM export_monitor que não existe)
 ALL_OBJS = $(CPU_MONITOR_OBJ) $(MEMORY_MONITOR_OBJ) $(IO_MONITOR_OBJ) \
            $(NAMESPACE_ANALYZER_OBJ) $(CGROUP_MANAGER_OBJ)
 

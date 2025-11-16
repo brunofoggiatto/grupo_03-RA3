@@ -1,0 +1,57 @@
+#include "monitor.hpp"
+#include <fstream>
+#include <iomanip>
+
+bool export_to_csv(const std::vector<MetricsSnapshot>& snapshots, const std::string& filename) {
+    std::ofstream file(filename);
+    if (!file.is_open()) return false;
+    
+    file << "timestamp,pid,cpu_percent,memory_rss_kb,memory_vsz_kb,"
+         << "io_read_bytes,io_write_bytes,io_read_rate_bps,io_write_rate_bps,"
+         << "net_rx_bytes,net_tx_bytes,threads\n";
+    
+    for (const auto& snap : snapshots) {
+        file << snap.timestamp << ","
+             << snap.pid << ","
+             << std::fixed << std::setprecision(2) << snap.cpu_percent << ","
+             << snap.memory_rss << ","
+             << snap.memory_vsz << ","
+             << snap.io_read_bytes << ","
+             << snap.io_write_bytes << ","
+             << snap.io_read_rate << ","
+             << snap.io_write_rate << ","
+             << snap.net_rx_bytes << ","
+             << snap.net_tx_bytes << ","
+             << snap.threads << "\n";
+    }
+    
+    file.close();
+    return true;
+}
+
+bool export_to_json(const std::vector<MetricsSnapshot>& snapshots, const std::string& filename) {
+    std::ofstream file(filename);
+    if (!file.is_open()) return false;
+    
+    file << "{\n  \"metrics\": [\n";
+    
+    for (size_t i = 0; i < snapshots.size(); i++) {
+        const auto& snap = snapshots[i];
+        
+        file << "    {\n";
+        file << "      \"timestamp\": \"" << snap.timestamp << "\",\n";
+        file << "      \"pid\": " << snap.pid << ",\n";
+        file << "      \"cpu_percent\": " << std::fixed << std::setprecision(2) << snap.cpu_percent << ",\n";
+        file << "      \"memory\": { \"rss_kb\": " << snap.memory_rss << ", \"vsz_kb\": " << snap.memory_vsz << " },\n";
+        file << "      \"io\": { \"read_bytes\": " << snap.io_read_bytes << ", \"write_bytes\": " << snap.io_write_bytes << " },\n";
+        file << "      \"network\": { \"rx_bytes\": " << snap.net_rx_bytes << ", \"tx_bytes\": " << snap.net_tx_bytes << " },\n";
+        file << "      \"threads\": " << snap.threads << "\n";
+        file << "    }";
+        if (i < snapshots.size() - 1) file << ",";
+        file << "\n";
+    }
+    
+    file << "  ]\n}\n";
+    file.close();
+    return true;
+}

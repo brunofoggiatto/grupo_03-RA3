@@ -3,6 +3,8 @@
 
 #include <cstddef>   // std::size_t
 #include <cstdint>   // tipos fixos (int64_t etc.)
+#include <vector>
+#include <string>
 
 // Estrutura principal com todas as métricas do processo
 struct ProcStats {
@@ -48,5 +50,24 @@ void calculate_io_rate(const ProcStats& prev, ProcStats& curr, double interval);
 // --- Network ---  (ADICIONADO PELO ALUNO 2)
 int get_network_usage(ProcStats& stats);
 void calculate_network_rate(const ProcStats& prev, ProcStats& curr, double interval);
+
+struct MetricsSnapshot {
+    std::string timestamp;
+    int pid;
+    double cpu_percent;
+    long memory_rss;
+    long memory_vsz;
+    long io_read_bytes;
+    long io_write_bytes;
+    double io_read_rate;
+    double io_write_rate;
+    long net_rx_bytes;
+    long net_tx_bytes;
+    int threads;
+};
+
+bool export_to_csv(const std::vector<MetricsSnapshot>& snapshots, const std::string& filename);
+bool export_to_json(const std::vector<MetricsSnapshot>& snapshots, const std::string& filename);
+
 
 #endif

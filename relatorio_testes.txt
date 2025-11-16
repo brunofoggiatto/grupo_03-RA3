@@ -1,6 +1,0 @@
-CGroup Utilization Report
-CGroup: teste_experimental_aluno4
-CPU Usage: 0 seconds
-CPU Limit: 0.5 cores
-Memory Usage: 0 MB
-Memory Limit: 100 MB
