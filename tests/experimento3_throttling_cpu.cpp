@@ -129,14 +129,14 @@ int main() {
     cout << "======================================================" << endl;
     
     if (geteuid() != 0) {
-        cerr << "\n❌ ERRO: Este experimento precisa de root!" << endl;
+        cerr << "\nERRO: Este experimento precisa de root!" << endl;
         cerr << "Execute com: sudo ./bin/experimento3_throttling_cpu\n" << endl;
         return 1;
     }
     
     // Verificar se test_cpu existe
     if (access("./bin/test_cpu", X_OK) != 0) {
-        cerr << "\n❌ ERRO: ./bin/test_cpu não encontrado ou não é executável" << endl;
+        cerr << "\nERRO: ./bin/test_cpu não encontrado ou não é executável" << endl;
         cerr << "Execute 'make all' primeiro\n" << endl;
         return 1;
     }

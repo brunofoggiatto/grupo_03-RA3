@@ -95,14 +95,14 @@ int main() {
     cout << "======================================================" << endl;
     
     if (geteuid() != 0) {
-        cerr << "\n❌ ERRO: Este experimento precisa de root!" << endl;
+        cerr << "\nERRO: Este experimento precisa de root!" << endl;
         cerr << "Execute com: sudo ./bin/experimento4_limitacao_memoria\n" << endl;
         return 1;
     }
     
     // Verificar se test_memory existe
     if (access("./bin/test_memory", X_OK) != 0) {
-        cerr << "\n❌ ERRO: ./bin/test_memory não encontrado ou não é executável" << endl;
+        cerr << "\nERRO: ./bin/test_memory não encontrado ou não é executável" << endl;
         cerr << "Execute 'make all' primeiro\n" << endl;
         return 1;
     }
@@ -119,7 +119,7 @@ int main() {
     MemoryTestResult result = run_memory_test_with_limit(manager, "exp4_mem_100mb", limit_100mb);
     
     if (result.peak_mb == -1) {
-        cerr << "\n❌ Falha ao executar teste" << endl;
+        cerr << "\nFalha ao executar teste" << endl;
         return 1;
     }
     
