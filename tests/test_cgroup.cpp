@@ -14,9 +14,9 @@ void test_read_metrics() {
     
     if (metrics) {
         metrics->print();
-        cout << "\n✓ Leitura de métricas OK (incluindo BlkIO)" << endl;
+        cout << "\nLeitura de métricas OK (incluindo BlkIO)" << endl;
     } else {
-        cout << "✗ Falha ao ler métricas" << endl;
+        cout << "Falha ao ler métricas" << endl;
     }
 }
 
@@ -25,15 +25,20 @@ void test_create_and_delete_cgroup() {
     cout << "TESTE 2: Criar e Deletar CGroup" << endl;
     cout << "========================================" << endl;
     
+    if (geteuid() != 0) {
+        cout << "\nPulando Teste 2: criar/deletar cgroup (requer root)" << endl;
+        return;
+    }
+
     CGroupManager manager;
     string test_group = "test_cgroup_ra3";
     
     // Criar
     cout << "\nCriando cgroup '" << test_group << "'..." << endl;
     if (manager.createCGroup(test_group)) {
-        cout << "✓ Criação OK" << endl;
+        cout << "Criação OK" << endl;
     } else {
-        cout << "✗ Falha na criação" << endl;
+        cout << "Falha na criação" << endl;
         return;
     }
     
@@ -44,9 +49,9 @@ void test_create_and_delete_cgroup() {
     // Deletar
     cout << "\nDeletando cgroup..." << endl;
     if (manager.deleteCGroup(test_group)) {
-        cout << "✓ Deleção OK" << endl;
+        cout << "Deleção OK" << endl;
     } else {
-        cout << "✗ Falha na deleção" << endl;
+        cout << "Falha na deleção" << endl;
     }
 }
 
@@ -55,19 +60,24 @@ void test_set_cpu_limit() {
     cout << "TESTE 3: Aplicar Limite de CPU" << endl;
     cout << "========================================" << endl;
     
+    if (geteuid() != 0) {
+        cout << "\nPulando Teste 3: aplicar limite de CPU (requer root)" << endl;
+        return;
+    }
+
     CGroupManager manager;
     string test_group = "test_cpu_limit";
     
     if (!manager.createCGroup(test_group)) {
-        cout << "✗ Falha ao criar cgroup" << endl;
+        cout << "Falha ao criar cgroup" << endl;
         return;
     }
     
     cout << "\nAplicando limite de 0.5 cores..." << endl;
     if (manager.setCPULimit(test_group, 0.5)) {
-        cout << "✓ Limite de CPU aplicado com sucesso" << endl;
+        cout << "Limite de CPU aplicado com sucesso" << endl;
     } else {
-        cout << "✗ Falha ao aplicar limite" << endl;
+        cout << "Falha ao aplicar limite" << endl;
     }
     
     manager.deleteCGroup(test_group);
@@ -78,20 +88,25 @@ void test_set_memory_limit() {
     cout << "TESTE 4: Aplicar Limite de Memória" << endl;
     cout << "========================================" << endl;
     
+    if (geteuid() != 0) {
+        cout << "\nPulando Teste 4: aplicar limite de memória (requer root)" << endl;
+        return;
+    }
+
     CGroupManager manager;
     string test_group = "test_memory_limit";
     
     if (!manager.createCGroup(test_group)) {
-        cout << "✗ Falha ao criar cgroup" << endl;
+        cout << "Falha ao criar cgroup" << endl;
         return;
     }
     
     long long limit_100mb = 100 * 1024 * 1024; // 100MB
     cout << "\nAplicando limite de 100MB..." << endl;
     if (manager.setMemoryLimit(test_group, limit_100mb)) {
-        cout << "✓ Limite de memória aplicado com sucesso" << endl;
+        cout << "Limite de memória aplicado com sucesso" << endl;
     } else {
-        cout << "✗ Falha ao aplicar limite" << endl;
+        cout << "Falha ao aplicar limite" << endl;
     }
     
     manager.deleteCGroup(test_group);
@@ -102,18 +117,23 @@ void test_move_process() {
     cout << "TESTE 5: Mover Processo para CGroup" << endl;
     cout << "========================================" << endl;
     
+    if (geteuid() != 0) {
+        cout << "\nPulando Teste 5: mover processo para cgroup (requer root)" << endl;
+        return;
+    }
+
     CGroupManager manager;
     string test_group = "test_move_process";
     
     if (!manager.createCGroup(test_group)) {
-        cout << "✗ Falha ao criar cgroup" << endl;
+        cout << "Falha ao criar cgroup" << endl;
         return;
     }
     
     pid_t my_pid = getpid();
     cout << "\nMovendo processo atual (PID " << my_pid << ") para o cgroup..." << endl;
     if (manager.moveProcessToCGroup(test_group, my_pid)) {
-        cout << "✓ Processo movido com sucesso" << endl;
+        cout << "Processo movido com sucesso" << endl;
         
         // Ler métricas do cgroup
         cout << "\nLendo métricas do cgroup após mover processo..." << endl;
@@ -125,8 +145,8 @@ void test_move_process() {
         // Voltar para o cgroup raiz
         cout << "\nMovendo processo de volta para o cgroup raiz..." << endl;
         manager.moveProcessToCGroup(".", my_pid);
-    } else {
-        cout << "✗ Falha ao mover processo" << endl;
+        } else {
+        cout << "Falha ao mover processo" << endl;
     }
     
     manager.deleteCGroup(test_group);
@@ -137,11 +157,16 @@ void test_generate_report() {
     cout << "TESTE 6: Gerar Relatório de Utilização" << endl;
     cout << "========================================" << endl;
     
+    if (geteuid() != 0) {
+        cout << "\nPulando Teste 6: gerar relatório (requer root)" << endl;
+        return;
+    }
+
     CGroupManager manager;
     string test_group = "test_report";
     
     if (!manager.createCGroup(test_group)) {
-        cout << "✗ Falha ao criar cgroup" << endl;
+        cout << "Falha ao criar cgroup" << endl;
         return;
     }
     
@@ -157,13 +182,16 @@ void test_generate_report() {
     string report_file = "test_cgroup_report.txt";
     cout << "\nGerando relatório em '" << report_file << "'..." << endl;
     if (manager.generateUtilizationReport(test_group, report_file)) {
-        cout << "✓ Relatório gerado com sucesso" << endl;
+        cout << "Relatório gerado com sucesso" << endl;
         cout << "\nConteúdo do relatório:" << endl;
         cout << "-----------------------------------" << endl;
-        system(("cat " + report_file).c_str());
+        int ret = system(("cat " + report_file).c_str());
+        if (ret != 0) {
+            cerr << "Aviso: Falha ao exibir conteúdo do arquivo" << endl;
+        }
         cout << "-----------------------------------" << endl;
-    } else {
-        cout << "✗ Falha ao gerar relatório" << endl;
+        } else {
+        cout << "Falha ao gerar relatório" << endl;
     }
     
     // Voltar para o cgroup raiz
@@ -180,7 +208,7 @@ int main() {
     
     // Verificar se está rodando como root
     if (geteuid() != 0) {
-        cout << "\n⚠️  AVISO: Alguns testes precisam de root!" << endl;
+        cout << "\nAVISO: Alguns testes precisam de root!" << endl;
         cout << "Execute com: sudo ./bin/test_cgroup\n" << endl;
     }
     

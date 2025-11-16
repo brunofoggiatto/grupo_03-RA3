@@ -1,15 +1,21 @@
 #include "monitor.hpp"
 #include <fstream>
 #include <iomanip>
+#include <sstream>
 
 bool export_to_csv(const std::vector<MetricsSnapshot>& snapshots, const std::string& filename) {
     std::ofstream file(filename);
-    if (!file.is_open()) return false;
+    if (!file.is_open()) {
+        std::cerr << " Erro: Não foi possível criar arquivo CSV: " << filename << std::endl;
+        return false;
+    }
     
+    // Escrever cabeçalho
     file << "timestamp,pid,cpu_percent,memory_rss_kb,memory_vsz_kb,"
          << "io_read_bytes,io_write_bytes,io_read_rate_bps,io_write_rate_bps,"
          << "net_rx_bytes,net_tx_bytes,threads\n";
     
+    // Escrever dados
     for (const auto& snap : snapshots) {
         file << snap.timestamp << ","
              << snap.pid << ","
@@ -18,22 +24,27 @@ bool export_to_csv(const std::vector<MetricsSnapshot>& snapshots, const std::str
              << snap.memory_vsz << ","
              << snap.io_read_bytes << ","
              << snap.io_write_bytes << ","
-             << snap.io_read_rate << ","
-             << snap.io_write_rate << ","
+             << std::fixed << std::setprecision(0) << snap.io_read_rate << ","
+             << std::fixed << std::setprecision(0) << snap.io_write_rate << ","
              << snap.net_rx_bytes << ","
              << snap.net_tx_bytes << ","
              << snap.threads << "\n";
     }
     
     file.close();
+    std::cout << " Arquivo CSV exportado com sucesso: " << filename << std::endl;
     return true;
 }
 
 bool export_to_json(const std::vector<MetricsSnapshot>& snapshots, const std::string& filename) {
     std::ofstream file(filename);
-    if (!file.is_open()) return false;
+    if (!file.is_open()) {
+        std::cerr << " Erro: Não foi possível criar arquivo JSON: " << filename << std::endl;
+        return false;
+    }
     
-    file << "{\n  \"metrics\": [\n";
+    file << "{\n";
+    file << "  \"metrics\": [\n";
     
     for (size_t i = 0; i < snapshots.size(); i++) {
         const auto& snap = snapshots[i];
@@ -42,16 +53,33 @@ bool export_to_json(const std::vector<MetricsSnapshot>& snapshots, const std::st
         file << "      \"timestamp\": \"" << snap.timestamp << "\",\n";
         file << "      \"pid\": " << snap.pid << ",\n";
         file << "      \"cpu_percent\": " << std::fixed << std::setprecision(2) << snap.cpu_percent << ",\n";
-        file << "      \"memory\": { \"rss_kb\": " << snap.memory_rss << ", \"vsz_kb\": " << snap.memory_vsz << " },\n";
-        file << "      \"io\": { \"read_bytes\": " << snap.io_read_bytes << ", \"write_bytes\": " << snap.io_write_bytes << " },\n";
-        file << "      \"network\": { \"rx_bytes\": " << snap.net_rx_bytes << ", \"tx_bytes\": " << snap.net_tx_bytes << " },\n";
+        file << "      \"memory\": {\n";
+        file << "        \"rss_kb\": " << snap.memory_rss << ",\n";
+        file << "        \"vsz_kb\": " << snap.memory_vsz << "\n";
+        file << "      },\n";
+        file << "      \"io\": {\n";
+        file << "        \"read_bytes\": " << snap.io_read_bytes << ",\n";
+        file << "        \"write_bytes\": " << snap.io_write_bytes << ",\n";
+        file << "        \"read_rate_bps\": " << std::fixed << std::setprecision(0) << snap.io_read_rate << ",\n";
+        file << "        \"write_rate_bps\": " << std::fixed << std::setprecision(0) << snap.io_write_rate << "\n";
+        file << "      },\n";
+        file << "      \"network\": {\n";
+        file << "        \"rx_bytes\": " << snap.net_rx_bytes << ",\n";
+        file << "        \"tx_bytes\": " << snap.net_tx_bytes << "\n";
+        file << "      },\n";
         file << "      \"threads\": " << snap.threads << "\n";
         file << "    }";
-        if (i < snapshots.size() - 1) file << ",";
+        
+        if (i < snapshots.size() - 1) {
+            file << ",";
+        }
         file << "\n";
     }
     
-    file << "  ]\n}\n";
+    file << "  ]\n";
+    file << "}\n";
+    
     file.close();
+    std::cout << " Arquivo JSON exportado com sucesso: " << filename << std::endl;
     return true;
 }
