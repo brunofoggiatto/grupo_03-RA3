@@ -92,22 +92,22 @@ private:
         return true;
     }
     
-    double calculateCPUUsage(int pid) {
+    double calculateCPUUsage([[maybe_unused]] int pid) {
         // Simulação - na implementação real, leríamos /proc/[pid]/stat
         return (rand() % 1000) / 10.0;
     }
     
-    long getMemoryRSS(int pid) {
+    long getMemoryRSS([[maybe_unused]] int pid) {
         // Simulação - na implementação real, leríamos /proc/[pid]/status
         return 100000 + (rand() % 900000);
     }
     
-    long getMemoryVSZ(int pid) {
+    long getMemoryVSZ([[maybe_unused]] int pid) {
         // Simulação - na implementação real, leríamos /proc/[pid]/status
         return 200000 + (rand() % 1800000);
     }
     
-    long getIOBytes(int pid) {
+    long getIOBytes([[maybe_unused]] int pid) {
         // Simulação - na implementação real, leríamos /proc/[pid]/io
         return rand() % 1000000;
     }
@@ -254,12 +254,12 @@ public:
         return true;
     }
     
-    bool setCPULimit(const string& cgroup_name, double cores) {
+    bool setCPULimit([[maybe_unused]] const string& cgroup_name, double cores) {
         cout << " Configurando limite de CPU: " << cores << " cores" << endl;
         return true;
     }
     
-    bool setMemoryLimit(const string& cgroup_name, size_t bytes) {
+    bool setMemoryLimit([[maybe_unused]] const string& cgroup_name, size_t bytes) {
         cout << " Configurando limite de memória: " << bytes / (1024*1024) << " MB" << endl;
         return true;
     }
@@ -303,7 +303,7 @@ public:
         setMemoryLimit(cgroup_name, limit);
         
         // Simular teste de alocação
-        size_t allocated = 80 * 1024 * 1024; // 80MB alocado
+        [[maybe_unused]] size_t allocated = 80 * 1024 * 1024; // 80MB alocado
         int fail_count = 2;
         
         cout << " Limite: 100MB -> Alocado: 80MB, Falhas: " << fail_count << endl;
@@ -496,11 +496,11 @@ void controlGroupManagerMenu() {
             break;
             
         default:
-            cout << "  Opção inválida!" << endl;
+            cout << "  Opção inválido!" << endl;
     }
 }
 
-void signal_handler(int signal) {
+void signal_handler([[maybe_unused]] int sig) {
     monitoring_active = false;
     cout << "\n   Recebido sinal de interrupção. Parando monitoramento..." << endl;
 }
