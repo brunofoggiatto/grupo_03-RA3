@@ -33,11 +33,27 @@ std::optional<NamespaceType> string_to_namespace_type(const std::string& str) {
     return std::nullopt;
 }
 
+// Helper para obter nome do processo
+static std::string get_process_name(pid_t pid) {
+    char path[256];
+    snprintf(path, sizeof(path), "/proc/%d/comm", pid);
+
+    std::ifstream file(path);
+    if (!file.is_open()) {
+        return "";
+    }
+
+    std::string name;
+    std::getline(file, name);
+    return name;
+}
+
 // FUNÇÃO 1: Lista todos os namespaces de um processo
 std::optional<ProcessNamespaces> list_process_namespaces(pid_t pid) {
     ProcessNamespaces proc_ns;
     proc_ns.pid = pid;
     proc_ns.ns_count = 0;
+    proc_ns.process_name = get_process_name(pid);
 
     // pra cada tipo de namespace, tenta ler o link em /proc/[pid]/ns/
     for (size_t i = 0; i < ns_names.size(); i++) {
@@ -259,7 +275,11 @@ bool generate_namespace_report(const std::string& output_file, const std::string
 
 // Funções auxiliares de print
 void print_process_namespaces(const ProcessNamespaces& proc_ns) {
-    std::cout << "\nNamespaces do processo PID " << proc_ns.pid << ":\n";
+    std::cout << "\nNamespaces do processo PID " << proc_ns.pid;
+    if (!proc_ns.process_name.empty()) {
+        std::cout << " (" << proc_ns.process_name << ")";
+    }
+    std::cout << ":\n";
     std::cout << "----------------------------------------\n";
 
     for (const auto& ns : proc_ns.namespaces) {
