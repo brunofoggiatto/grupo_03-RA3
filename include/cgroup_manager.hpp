@@ -10,7 +10,10 @@ public:
     long long cpu_usage_ns;
     long long memory_usage_bytes;
     long long memory_limit_bytes;
+    long long memory_peak_bytes;
+    long long memory_failcnt;
     std::string cgroup_version;
+    
     CGroupMetrics();
     void print() const;
 };
@@ -25,7 +28,7 @@ private:
 public:
     CGroupManager();
     std::unique_ptr<CGroupMetrics> getSystemMetrics() const;
+    std::unique_ptr<CGroupMetrics> getCGroupMetrics(const std::string& cgroup_path) const;
 };
 
 #endif
-
