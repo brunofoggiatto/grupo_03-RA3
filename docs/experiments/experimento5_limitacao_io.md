@@ -54,27 +54,40 @@ As métricas reportadas abaixo atendem aos requisitos do PDF: "Impacto no tempo 
 ## Como reproduzir
 
 ```bash
-# 1. Mude para o diretório de teste no disco Linux
-# O cgroup só consegue limitar o disco do Linux (onde o Ubuntu está),
-# não o disco do Windows (/mnt/c). Por isso, o teste DEVE ser
-# rodado de dentro da pasta ~/teste_io_linux.
-cd ~/teste_io_linux
+# 1. Entre na pasta 'tests' do projeto
+# (O script e o workload .cpp estão todos aqui)
+cd tests/
 
-# 2. Executar Baseline (Sem Limite)
-# (Move o terminal para o cgroup raiz, "sem limite")
-echo $$ | sudo tee /sys/fs/cgroup/cgroup.procs
-./test_io
-# Saída: ~544 ms
+# 2. Compile o workload de I/O
+g++ -std=c++23 -Wall -Wextra -O2 -o test_io test_io.cpp
 
-# 3. Configurar Limite (Ex: 1MB/s) e Executar
-# (Cria o grupo 'io_limit' e ativa o controlador 'io')
-sudo mkdir -p /sys/fs/cgroup/io_limit
-echo "+io" | sudo tee /sys/fs/cgroup/cgroup.subtree_control
+# 3. Dê permissão de execução ao script de benchmark
+chmod +x experimento5_run.sh
 
-# (Aplica o limite de 1MB/s ao disco 8:48)
-echo "8:48 wbps=1048576" | sudo tee /sys/fs/cgroup/io_limit/io.max
+# 4. Execute o benchmark automatizado com sudo
+# (O script precisa de sudo para manipular os cgroups)
+sudo ./experimento5_run.sh
 
-# (Move o terminal para o cgroup 'io_limit')
-echo $$ | sudo tee /sys/fs/cgroup/io_limit/cgroup.procs
-./test_io
-# Saída: ~100490 ms
+# --- SAÍDA ESPERADA DO SCRIPT ---
+# --- INICIANDO EXPERIMENTO 5: LIMITAÇÃO DE I/O ---
+# Identificando o disco principal...
+# Disco alvo identificado: 8:1 (Device: /dev/sda1) <-- (Este valor será automático!)
+# Configurando ambiente cgroup v2...
+#
+# Executando Baseline (Sem Limite)...
+# Iniciando teste de I/O...
+# Tempo total: 544 milissegundos.
+# Teste de I/O concluído.
+#
+# Executando Teste com Limite de 1 MB/s...
+# Iniciando teste de I/O...
+# Tempo total: 100490 milissegundos.
+# Teste de I/O concluído.
+#
+# Executando Teste com Limite de 5 MB/s...
+# Iniciando teste de I/O...
+# Tempo total: 20332 milissegundos.
+# Teste de I/O concluído.
+#
+# --- Limpando... (Movendo de volta ao cgroup raiz) ---
+# --- EXPERIMENTO 5 CONCLUÍDO. ---
