@@ -1,4 +1,11 @@
-# resource-monitor
+# Resource-monitor
+
+Integrantes:
+Luiz Afonso Barbosa Silva (Aluno A) 
+Enzo Erkmann (Aluno B)
+Bruno Hnenrique Foggiatto (Aluno C)
+João Paulo Arantes Martins (Aluno D)
+
 
 Conjunto de ferramentas para **monitoramento, análise e controle de recursos** de processos e containers em Linux.
 
