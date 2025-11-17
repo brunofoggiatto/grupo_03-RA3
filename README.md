@@ -326,7 +326,7 @@ Testa limites de memória em cgroups. Documenta em `docs/experiments/experimento
 ### Experimento 5: Limitação de I/O
 
 ```bash
-sudo bash tests/experimento5_run.sh
+sudo ./bin/experimento5_limitacao_io
 ```
 
 Script externo para testes de limite de I/O em cgroups. Documenta em `docs/experiments/experimento5_limitacao_io.md`.
@@ -494,6 +494,12 @@ sudo ./bin/resource-monitor
 
 ## Autores e Contribuições
 
+**Aluno 2** - Enzo Erkmann - Resource Profiler (I/O), Testes e Experimentos
+- Implementação: `src/io_monitor.cpp` (Rede por Processo)
+- Benchmark: `tests/experimento5_limitacao_io.cpp`
+- Comparação: `scripts/compare_tools.sh`
+- Documentação: `docs/experiments/experimento5_limitacao_io.md`
+
 **Aluno 3** - Namespace Analyzer + Experimento 2
 - Implementação: `src/namespace_analyzer.cpp` (290 linhas)
 - Testes: `tests/experimento2_test_namespaces.cpp`
@@ -501,7 +507,7 @@ sudo ./bin/resource-monitor
 - Experimento 2 com metodologia científica validada em literatura
 - Documentação: `docs/experiments/experimento2_namespaces.md`
 
-**Aluno D** - Integração main.cpp + correções
+**Aluno 4** - Integração main.cpp + correções
 - Interface principal interativa
 - Remoção de emojis
 - Timestamps thread-safe

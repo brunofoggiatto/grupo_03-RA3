@@ -6,7 +6,15 @@
 #include <vector>
 #include <string>
 
-// Estrutura principal com todas as métricas do processo
+/*
+ * -----------------------------------------------------------------------------
+ * STRUCT: ProcStats
+ *
+ * DESCRIÇÃO:
+ * Estrutura principal que armazena *todas* as métricas coletadas
+ * para um processo em um determinado instante.
+ * -----------------------------------------------------------------------------
+ */
 struct ProcStats {
     // --- CPU ---
     long utime = 0;
@@ -23,17 +31,28 @@ struct ProcStats {
     long major_faults = 0;
     double memory_percent = 0.0;
 
-    // --- I/O ---  (ADICIONADO PELO ALUNO 2)
+    // --- I/O (Aluno 2) ---
     long io_read_bytes = 0;
     long io_write_bytes = 0;
     double io_read_rate = 0.0;
     double io_write_rate = 0.0;
 
-    // --- Network ---  (ADICIONADO PELO ALUNO 2)
+    // --- Network (Sistema - Aluno 2) ---
     long net_rx_bytes = 0;
     long net_tx_bytes = 0;
     double net_rx_rate = 0.0;
     double net_tx_rate = 0.0;
+
+    /*
+    * -----------------------------------------------------------------
+    *
+    * DESCRIÇÃO:
+    * Armazena a contagem de conexões TCP ativas PARA ESTE PROCESSO.
+    * (O plano sugeria um struct 'NetworkStats' separado, mas integrar
+    * aqui é mais limpo para o loop principal do monitor).
+    * -----------------------------------------------------------------
+    */
+    int tcp_connections = 0;
 };
 
 // --- CPU ---
@@ -47,10 +66,37 @@ int get_memory_usage(int pid, ProcStats& stats);
 int get_io_usage(int pid, ProcStats& stats);
 void calculate_io_rate(const ProcStats& prev, ProcStats& curr, double interval);
 
-// --- Network ---  (ADICIONADO PELO ALUNO 2)
+/*
+ * -----------------------------------------------------------------------------
+ * SEÇÃO DE REDE (ALUNO 2)
+ * -----------------------------------------------------------------------------
+ */
+
+// (Função Original - Taxa de Rede do SISTEMA INTEIRO)
+// Coleta RX/TX total do sistema lendo /proc/net/dev
 int get_network_usage(ProcStats& stats);
+
+// (Função Original - Calcula Taxa de Rede do SISTEMA INTEIRO)
 void calculate_network_rate(const ProcStats& prev, ProcStats& curr, double interval);
 
+
+/*
+ * -----------------------------------------------------------------------------
+ * 
+ * DESCRIÇÃO:
+ * Coleta o número de conexões TCP ativas para um PROCESSO específico.
+ *
+ * NOTA:
+ * Esta é uma função "sobrecarregada" (overloaded). O C++ sabe qual
+ * chamar com base nos parâmetros:
+ * - get_network_usage(stats) -> Chama a de cima (taxa do sistema)
+ * - get_network_usage(pid, stats) -> Chama esta (TCP por processo)
+ * -----------------------------------------------------------------------------
+ */
+int get_network_usage(int pid, ProcStats& stats);
+
+
+// --- Seção de Exportação (Snapshots) ---
 struct MetricsSnapshot {
     std::string timestamp;
     int pid;
@@ -64,6 +110,7 @@ struct MetricsSnapshot {
     long net_rx_bytes;
     long net_tx_bytes;
     int threads;
+    // (É possível adicionar tcp_connections se quiser exportar)
 };
 
 bool export_to_csv(const std::vector<MetricsSnapshot>& snapshots, const std::string& filename);

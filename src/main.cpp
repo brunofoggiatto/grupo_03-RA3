@@ -82,10 +82,12 @@ public:
                 throw runtime_error("Não foi possível criar arquivo: " + csv_file);
             }
             
-            // Escrever cabeçalho CSV (memória em bytes, taxas em B/s)
+            // ==========================================================
+            // MUDANÇA TAREFA 2 (CABEÇALHO CSV)
+            // ==========================================================
             csv << "timestamp,pid,cpu_percent,memory_rss_bytes,memory_vsz_bytes,"
                 << "memory_swap_bytes,io_read_bytes,io_write_bytes,io_read_rate_bps,"
-                << "io_write_rate_bps,threads,minor_faults,major_faults\n";
+                << "io_write_rate_bps,threads,minor_faults,major_faults,tcp_connections\n"; // ADICIONADO tcp_connections
             csv.flush();
             
             // Coleta inicial
@@ -99,6 +101,7 @@ public:
             if (get_io_usage(pid, initial_stats) != 0) {
                 throw runtime_error("Falha ao coletar I/O do processo");
             }
+            // (Não chamamos a rede na coleta inicial, pois só é impressa no loop)
             
             prev_stats = initial_stats;
             
@@ -139,6 +142,12 @@ public:
                         throw runtime_error("Processo terminou");
                     }
                     
+                    // ==========================================================
+                    // MUDANÇA TAREFA 2 (COLETA DE REDE POR PID)
+                    // ==========================================================
+                    get_network_usage(pid, curr_stats); // Coleta conexões TCP
+                    
+                    
                     // Calcular CPU%
                     double cpu_pct = calculate_cpu_percent(prev_stats, curr_stats, interval_sec);
                     
@@ -153,7 +162,9 @@ public:
                     stringstream timestamp;
                     timestamp << put_time(&tm_buf, "%Y-%m-%d %H:%M:%S");
                     
-                    // Escrever linha CSV
+                    // ==========================================================
+                    // MUDANÇA TAREFA 2 (DADOS CSV)
+                    // ==========================================================
                     csv << timestamp.str() << ","
                         << pid << ","
                         << fixed << setprecision(2) << cpu_pct << ","
@@ -167,14 +178,18 @@ public:
                         << fixed << setprecision(0) << curr_stats.io_write_rate << ","
                         << curr_stats.threads << ","
                         << curr_stats.minor_faults << ","
-                        << curr_stats.major_faults << "\n";
+                        << curr_stats.major_faults << ","
+                        << curr_stats.tcp_connections << "\n"; // ADICIONADO
                     csv.flush();
                     
-                    // Imprimir na tela
+                    // ==========================================================
+                    // MUDANÇA TAREFA 2 (IMPRESSÃO NO CONSOLE)
+                    // ==========================================================
                     cout << "[" << timestamp.str() << "] "
                         << "CPU: " << setw(6) << fixed << setprecision(2) << cpu_pct << "% | "
                         << "RSS: " << setw(7) << (curr_stats.memory_rss / (1024*1024)) << "MB | "
                         << "IO: " << setw(7) << fixed << setprecision(2) << (double(curr_stats.io_read_rate) / (1024.0*1024.0)) << "MB/s"
+                        << " | TCP: " << setw(3) << curr_stats.tcp_connections // ADICIONADO
                         << endl;
                     
                     prev_stats = curr_stats;
@@ -210,7 +225,7 @@ public:
 };
 
 // ================================
-// COMPONENTE 2: NAMESPACE ANALYZER (JÁ CORRETO)
+// COMPONENTE 2: NAMESPACE ANALYZER 
 // ================================
 
 // Usa a implementação em namespace_analyzer.cpp
@@ -314,6 +329,9 @@ public:
     }
     
     bool runIOLimitExperiment() {
+        // ==========================================================
+        // MUDANÇA BÔNUS (TAREFA 1)
+        // ==========================================================
         cout << "\n=== EXPERIMENTO 5: LIMITAÇÃO DE I/O ===" << endl;
         
         if (geteuid() != 0) {
@@ -321,9 +339,17 @@ public:
             return false;
         }
         
-        cout << "\nExperimento 5 requer execução de script externo" << endl;
-        cout << "Execute manualmente: sudo bash tests/experimento5_run.sh\n" << endl;
+        cout << "\nExecutando benchmark de I/O em C++..." << endl;
+        cout << "Isso pode levar alguns minutos (100s para o limite de 1MB/s)." << endl;
         
+        // Chama o novo executável C++ que você criou na Tarefa 1
+        int ret = system("sudo ./bin/experimento5_limitacao_io");
+        if (ret != 0) {
+            cerr << "  O comando do experimento 5 retornou código: " << ret << "\n";
+            return false;
+        }
+        
+        cout << "Experimento 5 concluído!\n" << endl;
         return true;
     }
 };
@@ -439,7 +465,7 @@ void controlGroupManagerMenu() {
     cout << "\n=== CONTROL GROUP MANAGER ===" << endl;
     cout << "1. Executar Experimento 3 - Throttling de CPU" << endl;
     cout << "2. Executar Experimento 4 - Limitação de Memória" << endl;
-    cout << "3. Informações Experimento 5 - Limitação de I/O" << endl;
+    cout << "3. Executar Experimento 5 - Limitação de I/O" << endl; // MUDADO
     cout << "0. Voltar" << endl;
     cout << "Escolha: ";
     cin >> choice;
@@ -456,7 +482,10 @@ void controlGroupManagerMenu() {
             break;
             
         case 3:
-            cgroup_mgr.runIOLimitExperiment();
+            // ==========================================================
+            // MUDANÇA BÔNUS (TAREFA 1)
+            // ==========================================================
+            cgroup_mgr.runIOLimitExperiment(); // Chama a função que chama o C++
             break;
             
         case 0:
@@ -518,13 +547,15 @@ void experimentsMenu() {
         case 5:
             if (geteuid() == 0) {
                 cout << "\nExecutando Experimento 5..." << endl;
-                int ret = system("bash tests/experimento5_run.sh");
+                cout << "Este experimento testa os limites de I/O (requer sudo)" << endl;
+                cout << "Isso pode levar alguns minutos (100s para o limite de 1MB/s)." << endl;
+                // Chama o novo executável C++ que você criou na Tarefa 1
+                int ret = system("sudo ./bin/experimento5_limitacao_io");
                 if (ret != 0) {
-                    cerr << "  O script experimento5_run.sh retornou código: " << ret << "\n";
-                    cerr << "     Execute manualmente: sudo bash tests/experimento5_run.sh" << endl;
+                    cerr << "  O comando do experimento 5 retornou código: " << ret << "\n";
                 }
             } else {
-                cout << "\nExperimento 5 requer root. Execute com: sudo bash tests/experimento5_run.sh" << endl;
+                cout << "\nExperimento 5 requer root. Por favor, reinicie o programa com 'sudo ./bin/resource-monitor'" << endl;
             }
             break;
             
