@@ -1,204 +1,323 @@
-/*
- * -----------------------------------------------------------------------------
- * ARQUIVO: tests/experimento5_limitacao_io.cpp
- *
- * PROPÓSITO:
- * Programa de benchmark C++ que AUTOMATIZA o Experimento 5.
- * Resolve a violação do PDF (que proíbe scripts para tarefas principais).
- *
- * LÓGICA DE FUNCIONAMENTO:
- * 1. Verifica se está rodando como 'sudo' (root).
- * 2. DETECTA AUTOMATICAMENTE o disco (MAJ:MIN) onde está rodando.
- * 3. Cria um cgroup v2 ('exp5_io') e habilita o controlador 'io'.
- * 4. Roda o workload (escreve 100MB com sync()) 3 vezes:
- * - Sem limite (no cgroup raiz)
- * - Com limite de 1 MB/s
- * - Com limite de 5 MB/s
- * 5. Salva os resultados em 'experimento5_results.csv'.
- *
- * COMO COMPILAR:
- * g++ -std=c++23 -Wall -Wextra -O2 -o ./bin/experimento5_limitacao_io tests/experimento5_limitacao_io.cpp
- * -----------------------------------------------------------------------------
- */
-
 #include <iostream>
 #include <fstream>
 #include <chrono>
 #include <vector>
-#include <unistd.h>  // Para geteuid(), getpid(), sync()
-#include <sys/stat.h> // Para mkdir()
-#include <cstdio>    // Para popen, pclose, fgets (executar comandos)
-#include <memory>    // Para std::unique_ptr
-#include <array>     // Para std::array
-#include <stdexcept> // Para std::runtime_error
+#include <thread>
+#include <cstring>
+#include <cstdlib>
+#include <unistd.h>
+#include <sys/stat.h>
+#include <sys/types.h>
+#include <cerrno>
+#include <fcntl.h>
+#include <sstream>
+#include <dirent.h>
 
-/**
- * @brief Executa um comando shell e retorna sua saída como uma string.
- * @param cmd O comando a ser executado.
- * @return A saída (stdout) do comando.
- */
-std::string exec(const char* cmd) {
-    std::array<char, 128> buffer;
-    std::string result;
-    // Abre um pipe para ler a saída do comando
-    std::unique_ptr<FILE, decltype(&pclose)> pipe(popen(cmd, "r"), pclose);
-    if (!pipe) {
-        throw std::runtime_error("popen() failed!");
-    }
-    // Lê a saída linha por linha
-    while (fgets(buffer.data(), buffer.size(), pipe.get()) != nullptr) {
-        result += buffer.data();
-    }
-    // Remove a quebra de linha no final, se houver
-    if (!result.empty() && result[result.length()-1] == '\n') {
-        result.pop_back();
-    }
-    return result;
-}
-
+// Adicionar includes para major() e minor()
+#include <sys/sysmacros.h>
 
 class IOThrottleExperiment {
-    const std::string CGROUP_ROOT = "/sys/fs/cgroup";
-    const std::string CGROUP_NAME = "exp5_io";
-    const std::string CGROUP_PATH = CGROUP_ROOT + "/" + CGROUP_NAME;
-    std::string DEVICE; // NÃO é 'const', será detectada dinamicamente
+private:
+    std::string CGROUP_PATH;
+    std::string device_major_minor;
 
-    /**
-     * @brief Detecta o dispositivo (MAJ:MIN) do diretório atual.
-     * Roda 'findmnt' e 'lsblk' para achar o disco, tornando o
-     * script portátil para qualquer máquina (incluindo o PC do professor).
-     */
-    bool find_device() {
-        try {
-            std::cout << "--- Detectando disco (MAJ:MIN) para o diretório atual... ---\n";
-            // Acha a "fonte" (partição) onde o diretório atual (.) está
-            std::string device_path = exec("findmnt -n -o SOURCE --target .");
-            if (device_path.empty()) {
-                std::cerr << "ERRO: findmnt não conseguiu achar o device para '.'\n";
-                return false;
+    // Detectar dispositivo de bloco automaticamente
+    bool detect_block_device() {
+        // Tentar detectar o dispositivo raiz
+        std::ifstream mounts("/proc/mounts");
+        std::string line;
+        
+        while (std::getline(mounts, line)) {
+            if (line.find(" / ") != std::string::npos) {
+                // Encontrou a partição raiz
+                std::istringstream iss(line);
+                std::string device, mountpoint, fstype;
+                iss >> device >> mountpoint >> fstype;
+                
+                if (device.find("/dev/") == 0) {
+                    // Obter major:minor do dispositivo - CORREÇÃO AQUI
+                    struct stat st;
+                    if (stat(device.c_str(), &st) == 0) {
+                        int major_num = major(st.st_rdev);  // Renomeado para evitar conflito
+                        int minor_num = minor(st.st_rdev);  // Renomeado para evitar conflito
+                        device_major_minor = std::to_string(major_num) + ":" + std::to_string(minor_num);
+                        std::cout << " Dispositivo detectado: " << device 
+                                  << " (" << device_major_minor << ")" << std::endl;
+                        return true;
+                    }
+                }
             }
-
-            // Usa o lsblk para pegar os números MAJ:MIN daquele device
-            std::string cmd = "lsblk -dno MAJ:MIN " + device_path;
-            DEVICE = exec(cmd.c_str());
-            
-            if (DEVICE.empty()) {
-                std::cerr << "ERRO: lsblk não conseguiu achar o MAJ:MIN para " << device_path << "\n";
-                return false;
-            }
-            
-            std::cout << "Disco alvo detectado: " << DEVICE << " (Device: " << device_path << ")\n";
-            return true;
-            
-        } catch (const std::exception& e) {
-            std::cerr << "Exceção ao detectar o disco: " << e.what() << '\n';
-            return false;
         }
-    }
-
-    /**
-     * @brief Cria o cgroup e habilita o controlador 'io'.
-     */
-    bool create_cgroup() {
-        mkdir(CGROUP_PATH.c_str(), 0755);
-        // Habilita o controlador 'io' no cgroup pai (raiz)
-        // Usamos 'system' para 'echo' pois 'ofstream' sobrescreve o arquivo
-        // e apagaria outros controladores (ex: +cpu, +memory).
-        // O 2>/dev/null suprime erros (caso já esteja habilitado).
-        system("echo '+io' > /sys/fs/cgroup/cgroup.subtree_control 2>/dev/null");
+        
+        // Fallback para valores comuns
+        std::cout << "  Não foi possível detectar dispositivo, usando fallback..." << std::endl;
+        device_major_minor = "8:0"; // /dev/sda comum
         return true;
     }
 
-    /**
-     * @brief Define o limite de escrita (wbps) no cgroup.
-     */
-    void set_limit(const std::string& bps) {
-        std::ofstream io_max(CGROUP_PATH + "/io.max");
-        io_max << DEVICE << " wbps=" << bps << "\n";
+    // Restante do código mantido igual...
+    bool is_cgroup_v2() {
+        struct stat st;
+        return stat("/sys/fs/cgroup/cgroup.controllers", &st) == 0;
     }
 
-    /**
-     * @brief Move um PID para um cgroup específico.
-     */
-    void move_to_cgroup(pid_t pid, const std::string& group_path) {
-        std::ofstream procs(group_path + "/cgroup.procs");
-        procs << pid;
+    bool create_cgroup() {
+        if (is_cgroup_v2()) {
+            CGROUP_PATH = "/sys/fs/cgroup/exp5_io";
+        } else {
+            CGROUP_PATH = "/sys/fs/cgroup/blkio/exp5_io";
+        }
+
+        // Criar diretório do cgroup
+        if (mkdir(CGROUP_PATH.c_str(), 0755) != 0 && errno != EEXIST) {
+            std::cerr << " Erro ao criar cgroup " << CGROUP_PATH 
+                      << ": " << strerror(errno) << std::endl;
+            return false;
+        }
+
+        // Configurações específicas para cgroup v2
+        if (is_cgroup_v2()) {
+            std::ofstream subtree_control("/sys/fs/cgroup/cgroup.subtree_control");
+            if (subtree_control.is_open()) {
+                subtree_control << "+io" << std::endl;
+                subtree_control.close();
+            }
+        }
+
+        std::cout << " CGroup criado: " << CGROUP_PATH << std::endl;
+        return true;
     }
 
-    /**
-     * @brief Roda o workload de 100MB de escrita com sync().
-     * @return O tempo de execução em milissegundos.
-     */
-    long run_workload() {
+    void set_io_limit(const std::string& bps_limit) {
+        if (is_cgroup_v2()) {
+            // CGroup v2
+            std::ofstream io_max(CGROUP_PATH + "/io.max");
+            if (io_max.is_open()) {
+                io_max << device_major_minor << " wbps=" << bps_limit << std::endl;
+                io_max.close();
+                std::cout << " Limite CGroup v2: " << bps_limit << " bytes/s" << std::endl;
+            } else {
+                std::cerr << " Não foi possível definir limite de I/O (io.max)" << std::endl;
+            }
+        } else {
+            // CGroup v1
+            std::ofstream blkio_limit(CGROUP_PATH + "/blkio.throttle.write_bps_device");
+            if (blkio_limit.is_open()) {
+                blkio_limit << device_major_minor << " " << bps_limit << std::endl;
+                blkio_limit.close();
+                std::cout << " Limite CGroup v1: " << bps_limit << " bytes/s" << std::endl;
+            } else {
+                std::cerr << " Não foi possível definir limite de I/O (blkio.throttle.write_bps_device)" << std::endl;
+            }
+        }
+    }
+
+    void move_process_to_cgroup() {
+        std::string procs_file;
+        
+        if (is_cgroup_v2()) {
+            procs_file = CGROUP_PATH + "/cgroup.procs";
+        } else {
+            procs_file = CGROUP_PATH + "/tasks";
+        }
+
+        std::ofstream procs(procs_file);
+        if (procs.is_open()) {
+            procs << getpid() << std::endl;
+            procs.close();
+            std::cout << " Processo movido para o cgroup" << std::endl;
+        } else {
+            std::cerr << " Erro ao mover processo para cgroup" << std::endl;
+        }
+    }
+
+    void cleanup_cgroup() {
+        // Mover processo de volta para root
+        std::ofstream root_procs;
+        if (is_cgroup_v2()) {
+            root_procs.open("/sys/fs/cgroup/cgroup.procs");
+        } else {
+            root_procs.open("/sys/fs/cgroup/blkio/tasks");
+        }
+        
+        if (root_procs.is_open()) {
+            root_procs << getpid() << std::endl;
+            root_procs.close();
+        }
+
+        // Remover cgroup
+        if (rmdir(CGROUP_PATH.c_str()) == 0) {
+            std::cout << " Cgroup removido: " << CGROUP_PATH << std::endl;
+        } else if (errno != ENOENT) {
+            std::cerr << "  Aviso: Não foi possível remover " << CGROUP_PATH 
+                      << ": " << strerror(errno) << std::endl;
+        }
+    }
+
+    long run_workload(int size_mb) {
+        std::cout << "💾 Executando workload de " << size_mb << "MB..." << std::endl;
+        
         auto start = std::chrono::high_resolution_clock::now();
 
-        // Escreve 100MB no diretório ATUAL
-        std::ofstream out("./teste_io.tmp", std::ios::binary); 
-        std::vector<char> buf(1024*1024, 'A'); // Buffer de 1MB
-        for (int i = 0; i < 100; i++) { // Escreve 100x
-            out.write(buf.data(), buf.size());
+        std::string filename = "/tmp/io_benchmark_" + std::to_string(getpid()) + ".bin";
+        std::ofstream out(filename, std::ios::binary | std::ios::trunc);
+        
+        if (!out.is_open()) {
+            std::cerr << " Erro ao criar arquivo: " << filename << std::endl;
+            return -1;
         }
+
+        // Buffer de 1MB preenchido com dados
+        std::vector<char> buffer(1024 * 1024);
+        for (size_t i = 0; i < buffer.size(); i++) {
+            buffer[i] = static_cast<char>(i % 256);
+        }
+
+        bool success = true;
+        for (int i = 0; i < size_mb && success; i++) {
+            out.write(buffer.data(), buffer.size());
+            if (!out) {
+                std::cerr << " Erro na escrita no MB " << (i + 1) << std::endl;
+                success = false;
+            }
+            
+            // Flush periódico
+            if ((i + 1) % 10 == 0) {
+                out.flush();
+            }
+        }
+        
         out.close();
-        
-        // CRÍTICO: Força o cache (RAM) a ser escrito no disco (onde o limite atua)
-        sync(); 
-        
-        std::remove("./teste_io.tmp"); // Limpa o arquivo
+
+        if (success) {
+            // Sync e remover arquivo
+            sync();
+            std::remove(filename.c_str());
+        } else {
+            std::remove(filename.c_str());
+            return -1;
+        }
 
         auto end = std::chrono::high_resolution_clock::now();
-        return std::chrono::duration_cast<std::chrono::milliseconds>(end-start).count();
+        long duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
+        
+        std::cout << " Duração: " << duration << " ms" << std::endl;
+        return duration;
     }
 
 public:
     void run() {
-        if (!find_device()) {
-            std::cerr << "Falha ao detectar o disco. Abortando.\n";
+        std::cout << " INICIANDO EXPERIMENTO 5 - LIMITAÇÃO DE I/O" << std::endl;
+        std::cout << "=============================================" << std::endl;
+
+        // Detectar versão do CGroup
+        if (is_cgroup_v2()) {
+            std::cout << " Sistema usa: CGroup v2" << std::endl;
+        } else {
+            std::cout << " Sistema usa: CGroup v1" << std::endl;
+        }
+
+        // Detectar dispositivo
+        if (!detect_block_device()) {
+            std::cerr << " Não foi possível detectar dispositivo de bloco" << std::endl;
             return;
         }
-        
-        create_cgroup();
-        pid_t my_pid = getpid();
 
-        // --- Teste 1: Sem limite ---
-        std::cout << "\n--- Executando Baseline (Sem Limite)... ---\n";
-        // Move o processo para o cgroup raiz (sem limite)
-        move_to_cgroup(my_pid, CGROUP_ROOT);
-        long t1 = run_workload();
-        std::cout << "Resultado: " << t1 << " ms\n";
+        if (!create_cgroup()) {
+            return;
+        }
 
-        // Mover o processo para o cgroup com limite
-        move_to_cgroup(my_pid, CGROUP_PATH);
+        // Configurações de teste
+        struct TestCase {
+            std::string name;
+            std::string limit_bps;
+            int file_size_mb;
+        };
 
-        // --- Teste 2: 1 MB/s ---
-        std::cout << "\n--- Executando Teste com Limite de 1 MB/s... ---\n";
-        set_limit("1048576");
-        long t2 = run_workload();
-        std::cout << "Resultado: " << t2 << " ms\n";
+        std::vector<TestCase> test_cases = {
+            {"Sem limite", "max", 50},
+            {"1 MB/s", "1048576", 20},
+            {"5 MB/s", "5242880", 20}
+        };
 
-        // --- Teste 3: 5 MB/s ---
-        std::cout << "\n--- Executando Teste com Limite de 5 MB/s... ---\n";
-        set_limit("5242880");
-        long t3 = run_workload();
-        std::cout << "Resultado: " << t3 << " ms\n";
+        std::vector<long> results;
 
-        // Limpeza: move de volta para o raiz
-        move_to_cgroup(my_pid, CGROUP_ROOT);
+        for (const auto& test : test_cases) {
+            std::cout << "\n TESTE: " << test.name << std::endl;
+            std::cout << "---------------------------------------------" << std::endl;
 
-        // Exportar CSV
+            // Aplicar limite (exceto para "max")
+            if (test.limit_bps != "max") {
+                set_io_limit(test.limit_bps);
+            }
+
+            // Mover processo para cgroup
+            move_process_to_cgroup();
+
+            // Pequena pausa para estabilização
+            std::this_thread::sleep_for(std::chrono::seconds(1));
+
+            // Executar workload
+            long duration_ms = run_workload(test.file_size_mb);
+            
+            if (duration_ms > 0) {
+                double throughput_mbps = (test.file_size_mb * 1024.0 * 1024.0) / (duration_ms / 1000.0);
+                throughput_mbps /= (1024.0 * 1024.0); // Converter para MB/s
+                
+                std::cout << " Throughput: " << throughput_mbps << " MB/s" << std::endl;
+                results.push_back(duration_ms);
+            } else {
+                results.push_back(-1);
+            }
+
+            // Pausa entre testes
+            std::this_thread::sleep_for(std::chrono::seconds(2));
+        }
+
+        // Gerar relatório CSV
         std::ofstream csv("experimento5_results.csv");
-        csv << "limite,tempo_ms,throughput_mbps\n";
-        csv << "Sem limite," << t1 << "," << (100.0 / (t1 / 1000.0)) << "\n";
-        csv << "1MB/s," << t2 << "," << (100.0 / (t2 / 1000.0)) << "\n";
-        csv << "5MB/s," << t3 << "," << (100.0 / (t3 / 1000.0)) << "\n";
-        std::cout << "\nResultados salvos em 'experimento5_results.csv'\n";
+        csv << "limite,arquivo_mb,tempo_ms,throughput_mbps\n";
+        
+        for (size_t i = 0; i < test_cases.size(); i++) {
+            if (results[i] > 0 && i < results.size()) {
+                double throughput_mbps = (test_cases[i].file_size_mb * 1024.0 * 1024.0) / (results[i] / 1000.0);
+                throughput_mbps /= (1024.0 * 1024.0);
+                
+                csv << test_cases[i].name << ","
+                    << test_cases[i].file_size_mb << ","
+                    << results[i] << ","
+                    << throughput_mbps << "\n";
+            }
+        }
+        csv.close();
+
+        // Limpeza
+        cleanup_cgroup();
+
+        std::cout << "\n EXPERIMENTO 5 CONCLUÍDO!" << std::endl;
+        std::cout << " Resultados salvos em: experimento5_results.csv" << std::endl;
+        std::cout << " Dica: Execute 'cat experimento5_results.csv' para ver os resultados" << std::endl;
     }
 };
 
 int main() {
     if (geteuid() != 0) {
-        std::cerr << "ERRO: Este script deve ser executado com sudo (root)!\n";
+        std::cerr << " Este experimento requer privilégios de root!" << std::endl;
+        std::cerr << "   Execute com: sudo ./bin/experimento5_limitacao_io" << std::endl;
         return 1;
     }
-    IOThrottleExperiment().run();
+
+    std::cout << " Verificando ambiente CGroup..." << std::endl;
+
+    // Verificar se CGroup está montado
+    struct stat st;
+    if (stat("/sys/fs/cgroup", &st) != 0) {
+        std::cerr << " CGroup não está montado em /sys/fs/cgroup" << std::endl;
+        return 1;
+    }
+
+    IOThrottleExperiment experiment;
+    experiment.run();
+
     return 0;
 }

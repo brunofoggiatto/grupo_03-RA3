@@ -250,7 +250,7 @@ public:
         string cgroup = "exp3_test_throttling";
         
         cout << "\nCriando cgroup experimental..." << endl;
-        if (!mgr.createCGroup(cgroup)) {
+        if (!mgr.create_cgroup(cgroup)) {
             cerr << "Falha ao criar cgroup" << endl;
             return false;
         }
@@ -259,26 +259,26 @@ public:
         
         cout << "\nTestando limites de CPU:\n" << endl;
         cout << left << setw(15) << "Limite (cores)"
-             << right << setw(20) << "CPU Usage (ns)"
+             << right << setw(20) << "CPU Usage (s)"
              << setw(20) << "Status" << endl;
         cout << string(55, '-') << endl;
         
         for (double limit : limits) {
-            if (!mgr.setCPULimit(cgroup, limit)) {
+            if (!mgr.set_cpu_limit(cgroup, limit)) {
                 cerr << "Falha ao aplicar limite de " << limit << " cores" << endl;
                 continue;
             }
             
-            auto metrics = mgr.getCGroupMetrics("/sys/fs/cgroup/" + cgroup);
-            if (metrics) {
-                cout << fixed << setprecision(2) << setw(15) << limit
-                     << right << setw(20) << metrics->cpu_usage_ns
-                     << setw(20) << "OK" << endl;
-            }
+            double cpu_usage = mgr.read_cpu_usage(cgroup);
+            cout << fixed << setprecision(2) << setw(15) << limit
+                 << right << setw(20) << cpu_usage
+                 << setw(20) << "OK" << endl;
+            
+            this_thread::sleep_for(chrono::seconds(1));
         }
         
         cout << "\nDeletando cgroup..." << endl;
-        mgr.deleteCGroup(cgroup);
+        mgr.delete_cgroup(cgroup);
         cout << "Experimento 3 concluído!\n" << endl;
         
         return true;
@@ -293,45 +293,40 @@ public:
         }
         
         string cgroup = "exp4_test_memory";
-        long long limit_100mb = 100 * 1024 * 1024;
+        size_t limit_mb = 100;
         
         cout << "\nCriando cgroup experimental..." << endl;
-        if (!mgr.createCGroup(cgroup)) {
+        if (!mgr.create_cgroup(cgroup)) {
             cerr << "Falha ao criar cgroup" << endl;
             return false;
         }
         
         cout << "Aplicando limite de 100MB..." << endl;
-        if (!mgr.setMemoryLimit(cgroup, limit_100mb)) {
+        if (!mgr.set_memory_limit(cgroup, limit_mb)) {
             cerr << "Falha ao aplicar limite" << endl;
-            mgr.deleteCGroup(cgroup);
+            mgr.delete_cgroup(cgroup);
             return false;
         }
         
-        auto metrics = mgr.getCGroupMetrics("/sys/fs/cgroup/" + cgroup);
-        if (metrics) {
-            cout << "\nLimites Aplicados:" << endl;
-            cout << left << setw(25) << "  Limite configurado:"
-                 << right << setw(15) << limit_100mb / (1024*1024) << " MB" << endl;
-            cout << left << setw(25) << "  Uso atual:"
-                 << right << setw(15) << metrics->memory_usage_bytes / (1024*1024) << " MB" << endl;
-            cout << left << setw(25) << "  Pico:"
-                 << right << setw(15) << metrics->memory_peak_bytes / (1024*1024) << " MB" << endl;
-            cout << left << setw(25) << "  Falhas de alocação:"
-                 << right << setw(15) << metrics->memory_failcnt << endl;
-        }
+        size_t memory_usage = mgr.read_memory_usage(cgroup);
+        int pids_current = mgr.read_pids_current(cgroup);
+        
+        cout << "\nLimites Aplicados:" << endl;
+        cout << left << setw(25) << "  Limite configurado:"
+             << right << setw(15) << limit_mb << " MB" << endl;
+        cout << left << setw(25) << "  Uso atual:"
+             << right << setw(15) << memory_usage << " MB" << endl;
+        cout << left << setw(25) << "  PIDs atuais:"
+             << right << setw(15) << pids_current << endl;
         
         cout << "\nDeletando cgroup..." << endl;
-        mgr.deleteCGroup(cgroup);
+        mgr.delete_cgroup(cgroup);
         cout << "Experimento 4 concluído!\n" << endl;
         
         return true;
     }
     
     bool runIOLimitExperiment() {
-        // ==========================================================
-        // MUDANÇA BÔNUS (TAREFA 1)
-        // ==========================================================
         cout << "\n=== EXPERIMENTO 5: LIMITAÇÃO DE I/O ===" << endl;
         
         if (geteuid() != 0) {
@@ -342,7 +337,6 @@ public:
         cout << "\nExecutando benchmark de I/O em C++..." << endl;
         cout << "Isso pode levar alguns minutos (100s para o limite de 1MB/s)." << endl;
         
-        // Chama o novo executável C++ que você criou na Tarefa 1
         int ret = system("sudo ./bin/experimento5_limitacao_io");
         if (ret != 0) {
             cerr << "  O comando do experimento 5 retornou código: " << ret << "\n";
@@ -353,7 +347,6 @@ public:
         return true;
     }
 };
-
 // ================================
 // MENUS INTERATIVOS
 // ================================

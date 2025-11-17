@@ -17,3 +17,7 @@ tests/test_io
 # Resultados de experimentos (opcional - pode commitar como exemplo)
 # *.csv
 # *.txt
+venv/
+experimento*.csv
+experimento*.png
+experimento*.txt

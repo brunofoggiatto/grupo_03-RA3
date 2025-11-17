@@ -112,27 +112,27 @@ directories:
 # ============================================================
 
 $(CPU_MONITOR_OBJ): $(CPU_MONITOR_SRC)
-	@echo "📝 Compilando CPU Monitor..."
+	@echo " Compilando CPU Monitor..."
 	@$(CXX) $(CXXFLAGS) -c $< -o $@
 
 $(MEMORY_MONITOR_OBJ): $(MEMORY_MONITOR_SRC)
-	@echo "📝 Compilando Memory Monitor..."
+	@echo " Compilando Memory Monitor..."
 	@$(CXX) $(CXXFLAGS) -c $< -o $@
 
 $(IO_MONITOR_OBJ): $(IO_MONITOR_SRC)
-	@echo "📝 Compilando I/O Monitor..."
+	@echo " Compilando I/O Monitor..."
 	@$(CXX) $(CXXFLAGS) -c $< -o $@
 
 $(NAMESPACE_ANALYZER_OBJ): $(NAMESPACE_ANALYZER_SRC)
-	@echo "📝 Compilando Namespace Analyzer..."
+	@echo " Compilando Namespace Analyzer..."
 	@$(CXX) $(CXXFLAGS) -c $< -o $@
 
 $(CGROUP_MANAGER_OBJ): $(CGROUP_MANAGER_SRC)
-	@echo "📝 Compilando CGroup Manager..."
+	@echo " Compilando CGroup Manager..."
 	@$(CXX) $(CXXFLAGS) -c $< -o $@
 
 $(MAIN_OBJ): $(MAIN_SRC)
-	@echo "📝 Compilando Main (Integração)..."
+	@echo " Compilando Main (Integração)..."
 	@$(CXX) $(CXXFLAGS) -c $< -o $@
 
 # ============================================================
@@ -141,7 +141,7 @@ $(MAIN_OBJ): $(MAIN_SRC)
 
 $(MAIN_BIN): $(ALL_OBJS) $(MAIN_OBJ)
 	@echo ""
-	@echo "🔗 Linkando executável principal..."
+	@echo " Linkando executável principal..."
 	@$(CXX) $(CXXFLAGS) $(ALL_OBJS) $(MAIN_OBJ) -o $@ $(LDFLAGS)
 	@echo "Executável principal criado: $@"
 
@@ -153,19 +153,19 @@ tests: $(TEST_CPU) $(TEST_MEMORY) $(TEST_IO) $(TEST_CGROUP)
 	@echo "Testes compilados com sucesso"
 
 $(TEST_CPU): $(TEST_DIR)/test_cpu.cpp
-	@echo "📝 Compilando test_cpu..."
+	@echo " Compilando test_cpu..."
 	@$(CXX) $(CXXFLAGS) $< -o $@ $(LDFLAGS)
 
 $(TEST_MEMORY): $(TEST_DIR)/test_memory.cpp
-	@echo "📝 Compilando test_memory..."
+	@echo " Compilando test_memory..."
 	@$(CXX) $(CXXFLAGS) $< -o $@ $(LDFLAGS)
 
 $(TEST_IO): $(TEST_DIR)/test_io.cpp
-	@echo "📝 Compilando test_io..."
+	@echo " Compilando test_io..."
 	@$(CXX) $(CXXFLAGS) $< -o $@ $(LDFLAGS)
 
 $(TEST_CGROUP): $(TEST_DIR)/test_cgroup.cpp $(CGROUP_MANAGER_OBJ)
-	@echo "📝 Compilando test_cgroup..."
+	@echo " Compilando test_cgroup..."
 	@$(CXX) $(CXXFLAGS) $< $(CGROUP_MANAGER_OBJ) -o $@ $(LDFLAGS)
 
 # ============================================================
@@ -176,27 +176,27 @@ experiments: $(EXP1_BIN) $(EXP2_TEST_BIN) $(EXP2_BENCH_BIN) $(EXP3_BIN) $(EXP4_B
 	@echo "Experimentos compilados com sucesso"
 
 $(EXP1_BIN): $(TEST_DIR)/experimento1_overhead_monitoring.cpp $(CPU_MONITOR_OBJ) $(MEMORY_MONITOR_OBJ) $(IO_MONITOR_OBJ)
-	@echo "📝 Compilando Experimento 1..."
+	@echo " Compilando Experimento 1..."
 	@$(CXX) $(CXXFLAGS) $< $(CPU_MONITOR_OBJ) $(MEMORY_MONITOR_OBJ) $(IO_MONITOR_OBJ) -o $@ $(LDFLAGS)
 
 $(EXP2_TEST_BIN): $(TEST_DIR)/experimento2_test_namespaces.cpp $(NAMESPACE_ANALYZER_OBJ)
-	@echo "📝 Compilando Experimento 2 (testes)..."
+	@echo " Compilando Experimento 2 (testes)..."
 	@$(CXX) $(CXXFLAGS) $< $(NAMESPACE_ANALYZER_OBJ) -o $@ $(LDFLAGS)
 
 $(EXP2_BENCH_BIN): $(TEST_DIR)/experimento2_benchmark_namespaces.cpp $(NAMESPACE_ANALYZER_OBJ)
-	@echo "📝 Compilando Experimento 2 (benchmark)..."
+	@echo " Compilando Experimento 2 (benchmark)..."
 	@$(CXX) $(CXXFLAGS) $< $(NAMESPACE_ANALYZER_OBJ) -o $@ $(LDFLAGS)
 
 $(EXP3_BIN): $(TEST_DIR)/experimento3_throttling_cpu.cpp $(CGROUP_MANAGER_OBJ)
-	@echo "📝 Compilando Experimento 3..."
+	@echo " Compilando Experimento 3..."
 	@$(CXX) $(CXXFLAGS) $< $(CGROUP_MANAGER_OBJ) -o $@ $(LDFLAGS)
 
 $(EXP4_BIN): $(TEST_DIR)/experimento4_limitacao_memoria.cpp $(CGROUP_MANAGER_OBJ)
-	@echo "📝 Compilando Experimento 4..."
+	@echo " Compilando Experimento 4..."
 	@$(CXX) $(CXXFLAGS) $< $(CGROUP_MANAGER_OBJ) -o $@ $(LDFLAGS)
 
 $(EXP5_BIN): $(TEST_DIR)/experimento5_limitacao_io.cpp
-	@echo "📝 Compilando Experimento 5..."
+	@echo " Compilando Experimento 5..."
 	@mkdir -p $(BIN_DIR)
 	@$(CXX) $(CXXFLAGS) -o $@ $< $(LDFLAGS)
 
@@ -205,7 +205,7 @@ $(EXP5_BIN): $(TEST_DIR)/experimento5_limitacao_io.cpp
 # ============================================================
 
 clean:
-	@echo "🗑️  Limpando arquivos compilados..."
+	@echo "  Limpando arquivos compilados..."
 	@rm -rf $(BUILD_DIR)
 	@rm -rf $(BIN_DIR)
 	@rm -f *.csv *.json *.tmp
@@ -217,13 +217,13 @@ clean:
 
 run: all
 	@echo ""
-	@echo "🚀 Executando Resource Monitor..."
+	@echo " Executando Resource Monitor..."
 	@echo ""
 	@./$(MAIN_BIN)
 
 run-root: all
 	@echo ""
-	@echo "🚀 Executando Resource Monitor com sudo..."
+	@echo " Executando Resource Monitor com sudo..."
 	@echo ""
 	@sudo ./$(MAIN_BIN)
 

@@ -2,62 +2,77 @@
 #define CGROUP_MANAGER_HPP
 
 #include <string>
-#include <memory>
+#include <vector>
 #include <iostream>
 
-class CGroupMetrics {
-public:
-    // CPU
-    long long cpu_usage_ns;
-    
-    // Memory - Current Usage
-    long long memory_usage_bytes;
-    long long memory_limit_bytes;
-    
-    // Memory - Peak Usage
-    long long memory_peak_bytes;
-    
-    // Memory - Failures
-    long long memory_failcnt;
-    
-    // BlkIO - NOVO
-    long long blkio_read_bytes;
-    long long blkio_write_bytes;
-    
-    // Version
-    std::string cgroup_version;
-    
-    CGroupMetrics();
-    void print() const;
+struct PressureStats {
+    double avg10;
+    double avg60;
+    double avg300;
+    unsigned long long total;
 };
 
 class CGroupManager {
 private:
-    std::string detectCGroupVersion() const;
-    std::string readFile(const std::string& path) const;
-    bool writeFile(const std::string& path, const std::string& content) const;
-    long long parseLong(const std::string& str) const;
-    bool fileExists(const std::string& path) const;
+    std::string base_path;
 
 public:
     CGroupManager();
+    ~CGroupManager();
+
+    // Configuração base
+    void set_base_path(const std::string& path);
+    std::string get_base_path() const;
+
+    // Gerenciamento básico de cgroups
+    bool create_cgroup(const std::string& cgroup_path);
+    bool delete_cgroup(const std::string& cgroup_path);
+    bool exists_cgroup(const std::string& cgroup_path);
     
-    // === LEITURA DE MÉTRICAS ===
-    std::unique_ptr<CGroupMetrics> getSystemMetrics() const;
-    std::unique_ptr<CGroupMetrics> getCGroupMetrics(const std::string& cgroup_path) const;
+    // Gerenciamento de processos
+    bool move_process_to_cgroup(int pid, const std::string& cgroup_path);
+    bool move_current_process_to_cgroup(const std::string& cgroup_path);
+
+    // Controles de CPU
+    bool set_cpu_limit(const std::string& cgroup_path, double cores);
+    double read_cpu_usage(const std::string& cgroup_path);
+    bool set_cpu_quota(const std::string& cgroup_path, int quota_us, int period_us = 100000);
+
+    // Controles de Memória
+    bool set_memory_limit(const std::string& cgroup_path, size_t limit_mb);
+    bool set_memory_swap_limit(const std::string& cgroup_path, size_t limit_mb);
+    size_t read_memory_usage(const std::string& cgroup_path);
+    size_t read_memory_max_usage(const std::string& cgroup_path);
+    int read_memory_failcnt(const std::string& cgroup_path);
+    bool trigger_oom(const std::string& cgroup_path); // Para testes
+
+    // Controles de I/O
+    bool set_io_limit(const std::string& cgroup_path, const std::string& device, 
+                     long read_bps, long write_bps);
+    bool set_io_weight(const std::string& cgroup_path, int weight);
+
+    // **NOVO: Controles de PIDs**
+    bool set_pids_limit(const std::string& cgroup_path, int max_pids);
+    int read_pids_current(const std::string& cgroup_path);
+    int read_pids_max(const std::string& cgroup_path);
+
+    // **NOVO: CGroup v2 Pressure Stall Information**
+    PressureStats read_cpu_pressure(const std::string& cgroup_path);
+    PressureStats read_memory_pressure(const std::string& cgroup_path);
+    PressureStats read_io_pressure(const std::string& cgroup_path);
+    void print_pressure(const PressureStats& p, const std::string& type = "CPU");
+
+    // Monitoramento e relatórios
+    void display_cgroup_stats(const std::string& cgroup_path);
+    void generate_utilization_report(const std::string& cgroup_path, const std::string& filename = "cgroup_report.txt");
+    std::vector<std::string> list_processes_in_cgroup(const std::string& cgroup_path);
+
+    // Utilitários
+    static bool is_cgroup_v2();
+    static std::string get_current_cgroup(int pid = 0);
     
-    // === CRIAÇÃO E CONFIGURAÇÃO (NOVAS FUNÇÕES) ===
-    bool createCGroup(const std::string& cgroup_name) const;
-    bool deleteCGroup(const std::string& cgroup_name) const;
-    bool moveProcessToCGroup(const std::string& cgroup_name, int pid) const;
-    
-    // === APLICAR LIMITES ===
-    bool setCPULimit(const std::string& cgroup_name, double cores) const;
-    bool setMemoryLimit(const std::string& cgroup_name, long long bytes) const;
-    bool setIOLimit(const std::string& cgroup_name, const std::string& device, long long bps) const;
-    
-    // === RELATÓRIOS ===
-    bool generateUtilizationReport(const std::string& cgroup_name, const std::string& output_file) const;
+    // Testes e debugging
+    bool run_pid_limit_test(const std::string& test_cgroup = "/test_pid_limit", int max_pids = 5);
 };
 
 #endif

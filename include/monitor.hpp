@@ -7,6 +7,15 @@
 #include <string>
 
 /*
+ * STRUCT: NetworkStats (ADICIONADA - necessária para overload)
+ * Armazena estatísticas de rede POR PROCESSO
+ */
+struct NetworkStats {
+    int tcp_connections = 0;
+    int udp_connections = 0;
+};
+
+/*
  * -----------------------------------------------------------------------------
  * STRUCT: ProcStats
  *
@@ -43,15 +52,7 @@ struct ProcStats {
     double net_rx_rate = 0.0;
     double net_tx_rate = 0.0;
 
-    /*
-    * -----------------------------------------------------------------
-    *
-    * DESCRIÇÃO:
-    * Armazena a contagem de conexões TCP ativas PARA ESTE PROCESSO.
-    * (O plano sugeria um struct 'NetworkStats' separado, mas integrar
-    * aqui é mais limpo para o loop principal do monitor).
-    * -----------------------------------------------------------------
-    */
+    // --- Network (Por Processo - Aluno 2) ---
     int tcp_connections = 0;
 };
 
@@ -79,22 +80,12 @@ int get_network_usage(ProcStats& stats);
 // (Função Original - Calcula Taxa de Rede do SISTEMA INTEIRO)
 void calculate_network_rate(const ProcStats& prev, ProcStats& curr, double interval);
 
-
 /*
- * -----------------------------------------------------------------------------
- * 
- * DESCRIÇÃO:
- * Coleta o número de conexões TCP ativas para um PROCESSO específico.
- *
- * NOTA:
- * Esta é uma função "sobrecarregada" (overloaded). O C++ sabe qual
- * chamar com base nos parâmetros:
- * - get_network_usage(stats) -> Chama a de cima (taxa do sistema)
- * - get_network_usage(pid, stats) -> Chama esta (TCP por processo)
- * -----------------------------------------------------------------------------
+ * OVERLOAD: get_network_usage com NetworkStats
+ * Coleta conexões TCP POR PROCESSO
  */
-int get_network_usage(int pid, ProcStats& stats);
-
+int get_network_usage(ProcStats& stats);           // rede do sistema
+int get_network_usage(int pid, ProcStats& stats);  // rede por processo (TCP)
 
 // --- Seção de Exportação (Snapshots) ---
 struct MetricsSnapshot {
