@@ -167,7 +167,56 @@ void calculate_network_rate(const ProcStats& prev, ProcStats& curr, double inter
     if (curr.net_rx_rate < 0) curr.net_rx_rate = 0;
     if (curr.net_tx_rate < 0) curr.net_tx_rate = 0;
 }
+int get_network_usage(int pid, ProcStats& stats) {
+    // Limpa o contador
+    stats.tcp_connections = 0;
+    
+    // Abre o arquivo que lista todos os sockets TCP do sistema
+    std::ifstream tcp("/proc/net/tcp");
+    if (!tcp.is_open()) {
+        return -1;
+    }
+    
+    std::string line;
+    std::getline(tcp, line); // Pula o cabeçalho
 
+    // Processa cada socket ativo no sistema
+    while (std::getline(tcp, line)) {
+        unsigned long inode;
+        
+        // sscanf "pula" as 9 primeiras colunas e lê a 10ª (inode)
+        if (sscanf(line.c_str(), "%*d: %*s %*s %*s %*s %*s %*s %*s %*s %lu", &inode) == 1) {
+            
+            // Agora, "caçamos" este inode no processo alvo (pid)
+            std::string fd_path = "/proc/" + std::to_string(pid) + "/fd";
+            DIR* dir = opendir(fd_path.c_str());
+            if (!dir) continue; // Processo pode ter morrido
+
+            struct dirent* entry;
+            // Itera sobre todos os file descriptors do processo
+            while ((entry = readdir(dir)) != nullptr) {
+                char link[256];
+                std::string link_path = fd_path + "/" + entry->d_name;
+                
+                // readlink lê o destino do link (ex: "socket:[4567]")
+                ssize_t len = readlink(link_path.c_str(), link, sizeof(link)-1);
+                
+                if (len > 0) {
+                    link[len] = '\0';
+                    
+                    // Compara se o link é o socket que estamos procurando
+                    std::string socket_id = "socket:[" + std::to_string(inode) + "]";
+                    if (strstr(link, socket_id.c_str())) {
+                        stats.tcp_connections++;
+                        break; // Achamos! Próximo socket
+                    }
+                }
+            }
+            closedir(dir);
+        }
+    }
+    return 0;
+}
 
 /*
  * =============================================================================
@@ -184,11 +233,7 @@ void calculate_network_rate(const ProcStats& prev, ProcStats& curr, double inter
  * rede POR PROCESSO (neste caso, contagem de conexões).
  * -----------------------------------------------------------------------------
  */
-struct NetworkStats {
-    int tcp_connections = 0;
-    int udp_connections = 0;
-    // (A contagem de UDP pode ser implementada no futuro de forma similar)
-};
+
 
 /*
  * -----------------------------------------------------------------------------
