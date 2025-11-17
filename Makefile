@@ -64,6 +64,7 @@ EXP2_TEST_BIN = $(BIN_DIR)/experimento2_test_namespaces
 EXP2_BENCH_BIN = $(BIN_DIR)/experimento2_benchmark_namespaces
 EXP3_BIN = $(BIN_DIR)/experimento3_throttling_cpu
 EXP4_BIN = $(BIN_DIR)/experimento4_limitacao_memoria
+EXP5_BIN = $(BIN_DIR)/experimento5_limitacao_io
 
 # ============================================================
 # TARGET PRINCIPAL
@@ -95,6 +96,7 @@ all: directories $(MAIN_BIN) tests experiments
 	@echo "   $(EXP2_BENCH_BIN)"
 	@echo "   $(EXP3_BIN)"
 	@echo "   $(EXP4_BIN)"
+	@echo "   $(EXP5_BIN)"
 	@echo ""
 
 # ============================================================
@@ -170,7 +172,7 @@ $(TEST_CGROUP): $(TEST_DIR)/test_cgroup.cpp $(CGROUP_MANAGER_OBJ)
 # EXPERIMENTOS
 # ============================================================
 
-experiments: $(EXP1_BIN) $(EXP2_TEST_BIN) $(EXP2_BENCH_BIN) $(EXP3_BIN) $(EXP4_BIN)
+experiments: $(EXP1_BIN) $(EXP2_TEST_BIN) $(EXP2_BENCH_BIN) $(EXP3_BIN) $(EXP4_BIN) $(EXP5_BIN)
 	@echo "Experimentos compilados com sucesso"
 
 $(EXP1_BIN): $(TEST_DIR)/experimento1_overhead_monitoring.cpp $(CPU_MONITOR_OBJ) $(MEMORY_MONITOR_OBJ) $(IO_MONITOR_OBJ)
@@ -192,6 +194,11 @@ $(EXP3_BIN): $(TEST_DIR)/experimento3_throttling_cpu.cpp $(CGROUP_MANAGER_OBJ)
 $(EXP4_BIN): $(TEST_DIR)/experimento4_limitacao_memoria.cpp $(CGROUP_MANAGER_OBJ)
 	@echo "📝 Compilando Experimento 4..."
 	@$(CXX) $(CXXFLAGS) $< $(CGROUP_MANAGER_OBJ) -o $@ $(LDFLAGS)
+
+$(EXP5_BIN): $(TEST_DIR)/experimento5_limitacao_io.cpp
+	@echo "📝 Compilando Experimento 5..."
+	@mkdir -p $(BIN_DIR)
+	@$(CXX) $(CXXFLAGS) -o $@ $< $(LDFLAGS)
 
 # ============================================================
 # LIMPEZA

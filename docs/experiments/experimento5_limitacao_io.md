@@ -54,40 +54,25 @@ As métricas reportadas abaixo atendem aos requisitos do PDF: "Impacto no tempo 
 ## Como reproduzir
 
 ```bash
-# 1. Entre na pasta 'tests' do projeto
-# (O script e o workload .cpp estão todos aqui)
-cd tests/
+# 1. Compile o programa de benchmark do Experimento 5
+# (O $(CXX) e $(CXXFLAGS) virão do Makefile principal)
+make bin/experimento5_limitacao_io
 
-# 2. Compile o workload de I/O
-g++ -std=c++23 -Wall -Wextra -O2 -o test_io test_io.cpp
+# 2. Execute o benchmark automatizado com sudo
+# (O programa precisa de sudo para manipular os cgroups)
+sudo ./bin/experimento5_limitacao_io
 
-# 3. Dê permissão de execução ao script de benchmark
-chmod +x experimento5_run.sh
-
-# 4. Execute o benchmark automatizado com sudo
-# (O script precisa de sudo para manipular os cgroups)
-sudo ./experimento5_run.sh
-
-# --- SAÍDA ESPERADA DO SCRIPT ---
-# --- INICIANDO EXPERIMENTO 5: LIMITAÇÃO DE I/O ---
-# Identificando o disco principal...
-# Disco alvo identificado: 8:1 (Device: /dev/sda1) <-- (Este valor será automático!)
-# Configurando ambiente cgroup v2...
+# --- SAÍDA ESPERADA ---
+# --- Detectando disco (MAJ:MIN) para o diretório atual... ---
+# Disco alvo detectado: 8:1 (Device: /dev/sda1) <-- (Este valor será automático!)
 #
-# Executando Baseline (Sem Limite)...
-# Iniciando teste de I/O...
-# Tempo total: 544 milissegundos.
-# Teste de I/O concluído.
+# --- Executando Baseline (Sem Limite)... ---
+# Resultado: 544 ms
 #
-# Executando Teste com Limite de 1 MB/s...
-# Iniciando teste de I/O...
-# Tempo total: 100490 milissegundos.
-# Teste de I/O concluído.
+# --- Executando Teste com Limite de 1 MB/s... ---
+# Resultado: 100490 ms
 #
-# Executando Teste com Limite de 5 MB/s...
-# Iniciando teste de I/O...
-# Tempo total: 20332 milissegundos.
-# Teste de I/O concluído.
+# --- Executando Teste com Limite de 5 MB/s... ---
+# Resultado: 20332 ms
 #
-# --- Limpando... (Movendo de volta ao cgroup raiz) ---
-# --- EXPERIMENTO 5 CONCLUÍDO. ---
+# Resultados salvos em 'experimento5_results.csv'
