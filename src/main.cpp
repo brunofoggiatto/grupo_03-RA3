@@ -27,10 +27,6 @@ using namespace std;
 
 atomic<bool> monitoring_active{true};
 
-// ================================
-// COMPONENTE 1: RESOURCE PROFILER (CORRIGIDO)
-// ================================
-
 class ResourceProfiler {
 private:
     ProcStats prev_stats;
@@ -49,6 +45,19 @@ private:
         }
         file.close();
         return true;
+    }
+
+    string getErrorDescription(int error_code) {
+        switch (error_code) {
+            case ERR_PROCESS_NOT_FOUND:
+                return "Processo não encontrado";
+            case ERR_PERMISSION_DENIED:
+                return "Permissão negada";
+            case ERR_UNKNOWN:
+                return "Erro desconhecido";
+            default:
+                return "Erro código: " + to_string(error_code);
+        }
     }
 
 public:
@@ -71,37 +80,35 @@ public:
     
     bool monitorProcess(int pid, int duration_sec, int interval_sec, const string& csv_file) {
         try {
-            // Validação inicial
-            cout << "\n Validando acesso ao processo " << pid << "..." << endl;
+            cout << "\nValidando acesso ao processo " << pid << "..." << endl;
             validateProcessAccess(pid);
-            cout << "  Acesso validado com sucesso\n" << endl;
+            cout << "Acesso validado com sucesso\n" << endl;
             
-            // Abrir arquivo CSV
             ofstream csv(csv_file);
             if (!csv.is_open()) {
                 throw runtime_error("Não foi possível criar arquivo: " + csv_file);
             }
             
-            // ==========================================================
-            // MUDANÇA TAREFA 2 (CABEÇALHO CSV)
-            // ==========================================================
             csv << "timestamp,pid,cpu_percent,memory_rss_bytes,memory_vsz_bytes,"
                 << "memory_swap_bytes,io_read_bytes,io_write_bytes,io_read_rate_bps,"
-                << "io_write_rate_bps,threads,minor_faults,major_faults,tcp_connections\n"; // ADICIONADO tcp_connections
+                << "io_write_rate_bps,threads,minor_faults,major_faults,tcp_connections\n";
             csv.flush();
             
-            // Coleta inicial
             ProcStats initial_stats;
-            if (get_cpu_usage(pid, initial_stats) != 0) {
-                throw runtime_error("Falha ao coletar CPU do processo");
+            int cpu_result = get_cpu_usage(pid, initial_stats);
+            if (cpu_result < 0) {
+                throw runtime_error("Falha ao coletar CPU: " + getErrorDescription(cpu_result));
             }
-            if (get_memory_usage(pid, initial_stats) != 0) {
-                throw runtime_error("Falha ao coletar memória do processo");
+            
+            int memory_result = get_memory_usage(pid, initial_stats);
+            if (memory_result < 0) {
+                throw runtime_error("Falha ao coletar memória: " + getErrorDescription(memory_result));
             }
-            if (get_io_usage(pid, initial_stats) != 0) {
-                throw runtime_error("Falha ao coletar I/O do processo");
+            
+            int io_result = get_io_usage(pid, initial_stats);
+            if (io_result < 0) {
+                throw runtime_error("Falha ao coletar I/O: " + getErrorDescription(io_result));
             }
-            // (Não chamamos a rede na coleta inicial, pois só é impressa no loop)
             
             prev_stats = initial_stats;
             
@@ -110,12 +117,14 @@ public:
             cout << "Intervalo: " << interval_sec << " segundos" << endl;
             cout << "Arquivo: " << csv_file << endl;
             cout << "Pressione Ctrl+C para parar..." << endl;
-            cout << string(70, '-') << endl;
+            cout << "----------------------------------------" << endl;
             
             auto start = chrono::steady_clock::now();
             int iteration = 0;
+            int error_count = 0;
+            const int MAX_ERRORS = 3;
             
-            while (monitoring_active) {
+            while (monitoring_active && error_count < MAX_ERRORS) {
                 auto now = chrono::steady_clock::now();
                 auto elapsed = chrono::duration_cast<chrono::seconds>(now - start).count();
                 
@@ -124,37 +133,35 @@ public:
                 }
                 
                 try {
-                    // Validar que processo ainda existe
                     if (!pidExists(pid)) {
                         throw runtime_error("Processo " + to_string(pid) + " não existe mais");
                     }
                     
-                    // Coletar dados REAIS
                     ProcStats curr_stats;
                     
-                    if (get_cpu_usage(pid, curr_stats) != 0) {
-                        throw runtime_error("Processo terminou");
-                    }
-                    if (get_memory_usage(pid, curr_stats) != 0) {
-                        throw runtime_error("Processo terminou");
-                    }
-                    if (get_io_usage(pid, curr_stats) != 0) {
-                        throw runtime_error("Processo terminou");
+                    cpu_result = get_cpu_usage(pid, curr_stats);
+                    if (cpu_result < 0) {
+                        throw runtime_error("Erro CPU: " + getErrorDescription(cpu_result));
                     }
                     
-                    // ==========================================================
-                    // MUDANÇA TAREFA 2 (COLETA DE REDE POR PID)
-                    // ==========================================================
-                    get_network_usage(pid, curr_stats); // Coleta conexões TCP
+                    memory_result = get_memory_usage(pid, curr_stats);
+                    if (memory_result < 0) {
+                        throw runtime_error("Erro memória: " + getErrorDescription(memory_result));
+                    }
                     
+                    io_result = get_io_usage(pid, curr_stats);
+                    if (io_result < 0) {
+                        throw runtime_error("Erro I/O: " + getErrorDescription(io_result));
+                    }
                     
-                    // Calcular CPU%
+                    int network_result = get_network_usage(pid, curr_stats);
+                    if (network_result < 0) {
+                        curr_stats.tcp_connections = 0;
+                    }
+                    
                     double cpu_pct = calculate_cpu_percent(prev_stats, curr_stats, interval_sec);
-                    
-                    // Calcular taxas de I/O
                     calculate_io_rate(prev_stats, curr_stats, interval_sec);
                     
-                    // Timestamp (thread-safe)
                     auto time_now = chrono::system_clock::now();
                     time_t t = chrono::system_clock::to_time_t(time_now);
                     struct tm tm_buf;
@@ -162,13 +169,9 @@ public:
                     stringstream timestamp;
                     timestamp << put_time(&tm_buf, "%Y-%m-%d %H:%M:%S");
                     
-                    // ==========================================================
-                    // MUDANÇA TAREFA 2 (DADOS CSV)
-                    // ==========================================================
                     csv << timestamp.str() << ","
                         << pid << ","
                         << fixed << setprecision(2) << cpu_pct << ","
-                        // memory_* values are bytes
                         << curr_stats.memory_rss << ","
                         << curr_stats.memory_vsz << ","
                         << curr_stats.memory_swap << ","
@@ -179,26 +182,30 @@ public:
                         << curr_stats.threads << ","
                         << curr_stats.minor_faults << ","
                         << curr_stats.major_faults << ","
-                        << curr_stats.tcp_connections << "\n"; // ADICIONADO
+                        << curr_stats.tcp_connections << "\n";
                     csv.flush();
                     
-                    // ==========================================================
-                    // MUDANÇA TAREFA 2 (IMPRESSÃO NO CONSOLE)
-                    // ==========================================================
                     cout << "[" << timestamp.str() << "] "
-                        << "CPU: " << setw(6) << fixed << setprecision(2) << cpu_pct << "% | "
-                        << "RSS: " << setw(7) << (curr_stats.memory_rss / (1024*1024)) << "MB | "
-                        << "IO: " << setw(7) << fixed << setprecision(2) << (double(curr_stats.io_read_rate) / (1024.0*1024.0)) << "MB/s"
-                        << " | TCP: " << setw(3) << curr_stats.tcp_connections // ADICIONADO
-                        << endl;
+                         << "CPU: " << setw(6) << fixed << setprecision(2) << cpu_pct << "% | "
+                         << "RSS: " << setw(6) << (curr_stats.memory_rss / 1024) << "MB | "
+                         << "IO_R: " << setw(7) << fixed << setprecision(1) << (curr_stats.io_read_rate / (1024.0*1024.0)) << "MB/s | "
+                         << "TCP: " << setw(2) << curr_stats.tcp_connections
+                         << endl;
                     
                     prev_stats = curr_stats;
                     iteration++;
+                    error_count = 0;
                     
                 } catch (const exception& e) {
-                    cerr << "\n  Erro na iteração " << iteration + 1 << ": " << e.what() << endl;
+                    error_count++;
+                    cerr << "Erro iteração " << iteration + 1 << " (" << error_count << "/" << MAX_ERRORS << "): " << e.what() << endl;
                     
                     if (string(e.what()).find("não existe") != string::npos) {
+                        break;
+                    }
+                    
+                    if (error_count >= MAX_ERRORS) {
+                        cerr << "Muitos erros consecutivos. Parando monitoramento." << endl;
                         break;
                     }
                     
@@ -210,12 +217,16 @@ public:
             
             csv.close();
             
-            cout << string(70, '-') << endl;
-            cout << "Monitoramento concluído." << endl;
-            cout << "   " << iteration << " iterações realizadas" << endl;
-            cout << "   Dados salvos em: " << csv_file << endl;
+            cout << "----------------------------------------" << endl;
+            if (error_count >= MAX_ERRORS) {
+                cout << "Monitoramento interrompido devido a múltiplos erros" << endl;
+            } else {
+                cout << "Monitoramento concluído" << endl;
+            }
+            cout << "Iterações: " << iteration << endl;
+            cout << "Arquivo: " << csv_file << endl;
             
-            return true;
+            return (error_count < MAX_ERRORS);
             
         } catch (const exception& e) {
             cerr << "\nErro: " << e.what() << endl;
@@ -224,142 +235,148 @@ public:
     }
 };
 
-// ================================
-// COMPONENTE 2: NAMESPACE ANALYZER 
-// ================================
-
-// Usa a implementação em namespace_analyzer.cpp
-
-// ================================
-// COMPONENTE 3: CONTROL GROUP MANAGER (CORRIGIDO)
-// ================================
-
 class ControlGroupManagerWrapper {
 private:
     CGroupManager mgr;
     
+    void checkRootPermissions() {
+        if (geteuid() != 0) {
+            throw runtime_error("Este experimento requer privilégios de root. Execute com 'sudo ./bin/resource-monitor'");
+        }
+    }
+    
 public:
     bool runCPUThrottlingExperiment() {
-        cout << "\n=== EXPERIMENTO 3: THROTTLING DE CPU ===" << endl;
-        
-        if (geteuid() != 0) {
-            cerr << "Este experimento precisa de root!" << endl;
-            return false;
-        }
-        
-        string cgroup = "exp3_test_throttling";
-        
-        cout << "\nCriando cgroup experimental..." << endl;
-        if (!mgr.create_cgroup(cgroup)) {
-            cerr << "Falha ao criar cgroup" << endl;
-            return false;
-        }
-        
-        vector<double> limits = {0.25, 0.5, 1.0, 2.0};
-        
-        cout << "\nTestando limites de CPU:\n" << endl;
-        cout << left << setw(15) << "Limite (cores)"
-             << right << setw(20) << "CPU Usage (s)"
-             << setw(20) << "Status" << endl;
-        cout << string(55, '-') << endl;
-        
-        for (double limit : limits) {
-            if (!mgr.set_cpu_limit(cgroup, limit)) {
-                cerr << "Falha ao aplicar limite de " << limit << " cores" << endl;
-                continue;
+        try {
+            cout << "\nEXPERIMENTO 3: THROTTLING DE CPU" << endl;
+            
+            checkRootPermissions();
+            
+            string cgroup = "exp3_test_throttling";
+            
+            cout << "\nCriando cgroup experimental..." << endl;
+            if (!mgr.create_cgroup(cgroup)) {
+                throw runtime_error("Falha ao criar cgroup " + cgroup);
             }
             
-            double cpu_usage = mgr.read_cpu_usage(cgroup);
-            cout << fixed << setprecision(2) << setw(15) << limit
-                 << right << setw(20) << cpu_usage
-                 << setw(20) << "OK" << endl;
+            vector<double> limits = {0.25, 0.5, 1.0, 2.0};
             
-            this_thread::sleep_for(chrono::seconds(1));
+            cout << "\nTestando limites de CPU:" << endl;
+            cout << "-------------------------" << endl;
+            cout << left << setw(15) << "Limite (cores)"
+                 << right << setw(20) << "CPU Usage (ns)"
+                 << setw(20) << "Status" << endl;
+            cout << "-------------------------" << endl;
+            
+            for (double limit : limits) {
+                cout << fixed << setprecision(2) << setw(15) << limit;
+                
+                if (!mgr.set_cpu_limit(cgroup, limit)) {
+                    cout << right << setw(20) << "N/A" << setw(20) << "FALHA" << endl;
+                    continue;
+                }
+                
+                double cpu_usage = mgr.read_cpu_usage(cgroup);
+                cout << right << setw(20) << cpu_usage << setw(20) << "OK" << endl;
+                
+                this_thread::sleep_for(chrono::seconds(1));
+            }
+            
+            cout << "\nDeletando cgroup..." << endl;
+            mgr.delete_cgroup(cgroup);
+            cout << "Experimento 3 concluído!\n" << endl;
+            
+            return true;
+            
+        } catch (const exception& e) {
+            cerr << "Erro no Experimento 3: " << e.what() << endl;
+            return false;
         }
-        
-        cout << "\nDeletando cgroup..." << endl;
-        mgr.delete_cgroup(cgroup);
-        cout << "Experimento 3 concluído!\n" << endl;
-        
-        return true;
     }
     
     bool runMemoryLimitExperiment() {
-        cout << "\n=== EXPERIMENTO 4: LIMITAÇÃO DE MEMÓRIA ===" << endl;
-        
-        if (geteuid() != 0) {
-            cerr << "Este experimento precisa de root!" << endl;
-            return false;
-        }
-        
-        string cgroup = "exp4_test_memory";
-        size_t limit_mb = 100;
-        
-        cout << "\nCriando cgroup experimental..." << endl;
-        if (!mgr.create_cgroup(cgroup)) {
-            cerr << "Falha ao criar cgroup" << endl;
-            return false;
-        }
-        
-        cout << "Aplicando limite de 100MB..." << endl;
-        if (!mgr.set_memory_limit(cgroup, limit_mb)) {
-            cerr << "Falha ao aplicar limite" << endl;
+        try {
+            cout << "\nEXPERIMENTO 4: LIMITAÇÃO DE MEMÓRIA" << endl;
+            
+            checkRootPermissions();
+            
+            string cgroup = "exp4_test_memory";
+            size_t limit_mb = 100;
+            
+            cout << "\nCriando cgroup experimental..." << endl;
+            if (!mgr.create_cgroup(cgroup)) {
+                throw runtime_error("Falha ao criar cgroup " + cgroup);
+            }
+            
+            cout << "Aplicando limite de " << limit_mb << "MB..." << endl;
+            if (!mgr.set_memory_limit(cgroup, limit_mb)) {
+                mgr.delete_cgroup(cgroup);
+                throw runtime_error("Falha ao aplicar limite de memória");
+            }
+            
+            size_t memory_usage = mgr.read_memory_usage(cgroup);
+            int pids_current = mgr.read_pids_current(cgroup);
+            
+            cout << "\nResultados:" << endl;
+            cout << "-----------" << endl;
+            cout << left << setw(25) << "Limite configurado:"
+                 << right << setw(10) << limit_mb << " MB" << endl;
+            cout << left << setw(25) << "Uso atual:"
+                 << right << setw(10) << memory_usage << " MB" << endl;
+            cout << left << setw(25) << "PIDs ativos:"
+                 << right << setw(10) << pids_current << endl;
+            
+            cout << "\nDeletando cgroup..." << endl;
             mgr.delete_cgroup(cgroup);
+            cout << "Experimento 4 concluído!\n" << endl;
+            
+            return true;
+            
+        } catch (const exception& e) {
+            cerr << "Erro no Experimento 4: " << e.what() << endl;
             return false;
         }
-        
-        size_t memory_usage = mgr.read_memory_usage(cgroup);
-        int pids_current = mgr.read_pids_current(cgroup);
-        
-        cout << "\nLimites Aplicados:" << endl;
-        cout << left << setw(25) << "  Limite configurado:"
-             << right << setw(15) << limit_mb << " MB" << endl;
-        cout << left << setw(25) << "  Uso atual:"
-             << right << setw(15) << memory_usage << " MB" << endl;
-        cout << left << setw(25) << "  PIDs atuais:"
-             << right << setw(15) << pids_current << endl;
-        
-        cout << "\nDeletando cgroup..." << endl;
-        mgr.delete_cgroup(cgroup);
-        cout << "Experimento 4 concluído!\n" << endl;
-        
-        return true;
     }
     
     bool runIOLimitExperiment() {
-        cout << "\n=== EXPERIMENTO 5: LIMITAÇÃO DE I/O ===" << endl;
-        
-        if (geteuid() != 0) {
-            cerr << "Este experimento precisa de root!" << endl;
+        try {
+            cout << "\nEXPERIMENTO 5: LIMITAÇÃO DE I/O" << endl;
+            
+            checkRootPermissions();
+            
+            cout << "\nExecutando benchmark de I/O em C++..." << endl;
+            cout << "Isso pode levar alguns minutos..." << endl;
+            
+            ifstream bin_file("./bin/experimento5_limitacao_io");
+            if (!bin_file.good()) {
+                throw runtime_error("Binário do experimento 5 não encontrado. Compile com 'make all'");
+            }
+            
+            int ret = system("sudo ./bin/experimento5_limitacao_io");
+            if (ret != 0) {
+                throw runtime_error("Experimento 5 retornou código: " + to_string(ret));
+            }
+            
+            cout << "Experimento 5 concluído!\n" << endl;
+            return true;
+            
+        } catch (const exception& e) {
+            cerr << "Erro no Experimento 5: " << e.what() << endl;
             return false;
         }
-        
-        cout << "\nExecutando benchmark de I/O em C++..." << endl;
-        cout << "Isso pode levar alguns minutos (100s para o limite de 1MB/s)." << endl;
-        
-        int ret = system("sudo ./bin/experimento5_limitacao_io");
-        if (ret != 0) {
-            cerr << "  O comando do experimento 5 retornou código: " << ret << "\n";
-            return false;
-        }
-        
-        cout << "Experimento 5 concluído!\n" << endl;
-        return true;
     }
 };
-// ================================
-// MENUS INTERATIVOS
-// ================================
 
 void resourceProfilerMenu() {
     ResourceProfiler profiler;
     int pid, duration, interval;
     
-    cout << "\n=== RESOURCE PROFILER ===" << endl;
+    cout << "\nRESOURCE PROFILER" << endl;
+    cout << "-----------------" << endl;
     cout << "Digite o PID para monitorar: ";
     
     if (!(cin >> pid)) {
-        cout << "  Erro: PID deve ser um número inteiro!" << endl;
+        cout << "Erro: PID deve ser um número inteiro!" << endl;
         cin.clear();
         cin.ignore(10000, '\n');
         return;
@@ -385,7 +402,8 @@ void resourceProfilerMenu() {
 void namespaceAnalyzerMenu() {
     int choice, pid, pid1, pid2;
 
-    cout << "\n=== NAMESPACE ANALYZER ===" << endl;
+    cout << "\nNAMESPACE ANALYZER" << endl;
+    cout << "------------------" << endl;
     cout << "1. Listar namespaces de um processo" << endl;
     cout << "2. Comparar namespaces entre processos" << endl;
     cout << "3. Gerar relatório do sistema (CSV)" << endl;
@@ -404,7 +422,7 @@ void namespaceAnalyzerMenu() {
                 if (proc_ns) {
                     print_process_namespaces(*proc_ns);
                 } else {
-                    cout << "  Erro: Não foi possível acessar o processo " << pid << endl;
+                    cout << "Erro: Não foi possível acessar o processo " << pid << endl;
                 }
             }
             break;
@@ -419,7 +437,7 @@ void namespaceAnalyzerMenu() {
                 if (comparison) {
                     print_namespace_comparison(*comparison);
                 } else {
-                    cout << "  Erro: Não foi possível comparar os processos" << endl;
+                    cout << "Erro: Não foi possível comparar os processos" << endl;
                 }
             }
             break;
@@ -428,9 +446,9 @@ void namespaceAnalyzerMenu() {
             {
                 string filename = "namespace_report.csv";
                 if (generate_namespace_report(filename, "csv")) {
-                    cout << " Relatório CSV gerado: " << filename << endl;
+                    cout << "Relatório CSV gerado: " << filename << endl;
                 } else {
-                    cout << "  Erro ao gerar relatório CSV" << endl;
+                    cout << "Erro ao gerar relatório CSV" << endl;
                 }
             }
             break;
@@ -439,15 +457,15 @@ void namespaceAnalyzerMenu() {
             {
                 string filename = "namespace_report.json";
                 if (generate_namespace_report(filename, "json")) {
-                    cout << " Relatório JSON gerado: " << filename << endl;
+                    cout << "Relatório JSON gerado: " << filename << endl;
                 } else {
-                    cout << "  Erro ao gerar relatório JSON" << endl;
+                    cout << "Erro ao gerar relatório JSON" << endl;
                 }
             }
             break;
 
         default:
-            cout << "  Opção inválida!" << endl;
+            cout << "Opção inválida!" << endl;
     }
 }
 
@@ -455,10 +473,11 @@ void controlGroupManagerMenu() {
     ControlGroupManagerWrapper cgroup_mgr;
     int choice;
     
-    cout << "\n=== CONTROL GROUP MANAGER ===" << endl;
+    cout << "\nCONTROL GROUP MANAGER" << endl;
+    cout << "---------------------" << endl;
     cout << "1. Executar Experimento 3 - Throttling de CPU" << endl;
     cout << "2. Executar Experimento 4 - Limitação de Memória" << endl;
-    cout << "3. Executar Experimento 5 - Limitação de I/O" << endl; // MUDADO
+    cout << "3. Executar Experimento 5 - Limitação de I/O" << endl;
     cout << "0. Voltar" << endl;
     cout << "Escolha: ";
     cin >> choice;
@@ -475,28 +494,26 @@ void controlGroupManagerMenu() {
             break;
             
         case 3:
-            // ==========================================================
-            // MUDANÇA BÔNUS (TAREFA 1)
-            // ==========================================================
-            cgroup_mgr.runIOLimitExperiment(); // Chama a função que chama o C++
+            cgroup_mgr.runIOLimitExperiment();
             break;
             
         case 0:
             break;
             
         default:
-            cout << "  Opção inválida!" << endl;
+            cout << "Opção inválida!" << endl;
     }
 }
 
 void experimentsMenu() {
     int choice;
     
-    cout << "\n=== MENU DE EXPERIMENTOS ===" << endl;
+    cout << "\nMENU DE EXPERIMENTOS" << endl;
+    cout << "--------------------" << endl;
     cout << "1. Experimento 1 - Overhead de Monitoramento" << endl;
     cout << "2. Experimento 2 - Isolamento de Namespaces" << endl;
-    cout << "3. Experimento 3 - Throttling de CPU (via Control Group Manager)" << endl;
-    cout << "4. Experimento 4 - Limitação de Memória (via Control Group Manager)" << endl;
+    cout << "3. Experimento 3 - Throttling de CPU" << endl;
+    cout << "4. Experimento 4 - Limitação de Memória" << endl;
     cout << "5. Experimento 5 - Limitação de I/O" << endl;
     cout << "0. Voltar" << endl;
     cout << "Escolha: ";
@@ -507,48 +524,50 @@ void experimentsMenu() {
     switch (choice) {
         case 1:
             cout << "\nExecutando Experimento 1..." << endl;
-            cout << "Este experimento mede o overhead do Resource Profiler" << endl;
-            cout << "Requer sudo e leva alguns minutos..." << endl;
+            cout << "Medindo overhead do Resource Profiler" << endl;
             {
                 int ret = system("sudo ./bin/experimento1_overhead_monitoring");
                 if (ret != 0) {
-                    cerr << "  O comando do experimento 1 retornou código: " << ret << "\n";
-                    cerr << "     (se for falha por permissão, execute o programa como root)" << endl;
+                    cerr << "Experimento 1 retornou código: " << ret << endl;
                 }
             }
             break;
             
         case 2:
             cout << "\nExecutando Experimento 2..." << endl;
-            cout << "Este experimento analisa namespaces do sistema" << endl;
+            cout << "Analisando namespaces do sistema" << endl;
             {
                 int ret = system("./bin/experimento2_benchmark_namespaces");
                 if (ret != 0) {
-                    cerr << "  O comando do experimento 2 retornou código: " << ret << "\n";
+                    cerr << "Experimento 2 retornou código: " << ret << endl;
                 }
             }
             break;
             
         case 3:
-            cout << "\nVeja 'Control Group Manager' no menu principal" << endl;
+            cout << "\nExecutando Experimento 3..." << endl;
+            cout << "Testando throttling de CPU" << endl;
+            {
+                ControlGroupManagerWrapper mgr;
+                mgr.runCPUThrottlingExperiment();
+            }
             break;
             
         case 4:
-            cout << "\nVeja 'Control Group Manager' no menu principal" << endl;
+            cout << "\nExecutando Experimento 4..." << endl;
+            cout << "Testando limite de memória" << endl;
+            {
+                ControlGroupManagerWrapper mgr;
+                mgr.runMemoryLimitExperiment();
+            }
             break;
             
         case 5:
-            if (geteuid() == 0) {
-                cout << "\nExecutando Experimento 5..." << endl;
-                cout << "Este experimento testa os limites de I/O (requer sudo)" << endl;
-                cout << "Isso pode levar alguns minutos (100s para o limite de 1MB/s)." << endl;
-                // Chama o novo executável C++ que você criou na Tarefa 1
-                int ret = system("sudo ./bin/experimento5_limitacao_io");
-                if (ret != 0) {
-                    cerr << "  O comando do experimento 5 retornou código: " << ret << "\n";
-                }
-            } else {
-                cout << "\nExperimento 5 requer root. Por favor, reinicie o programa com 'sudo ./bin/resource-monitor'" << endl;
+            cout << "\nExecutando Experimento 5..." << endl;
+            cout << "Testando limite de I/O" << endl;
+            {
+                ControlGroupManagerWrapper mgr;
+                mgr.runIOLimitExperiment();
             }
             break;
             
@@ -556,16 +575,14 @@ void experimentsMenu() {
             break;
             
         default:
-            cout << "  Opção inválida!" << endl;
+            cout << "Opção inválida!" << endl;
     }
 }
 
 void showMainMenu() {
-    cout << "\n╔════════════════════════════════════════╗" << endl;
-    cout << "║   SISTEMA DE MONITORAMENTO - RA3      ║" << endl;
-    cout << "║   Recursos, Namespaces e CGroups      ║" << endl;
-    cout << "╚════════════════════════════════════════╝" << endl;
-    cout << "\n1. Resource Profiler (Componente 1)" << endl;
+    cout << "\nSISTEMA DE MONITORAMENTO - RA3" << endl;
+    cout << "------------------------------" << endl;
+    cout << "1. Resource Profiler (Componente 1)" << endl;
     cout << "2. Namespace Analyzer (Componente 2)" << endl;
     cout << "3. Control Group Manager (Componente 3)" << endl;
     cout << "4. Menu de Experimentos (1-5)" << endl;
@@ -574,36 +591,28 @@ void showMainMenu() {
 }
 
 void signal_handler(int sig) {
-    (void)sig;  // Silencia warning de parâmetro não usado
+    (void)sig;
     monitoring_active = false;
-    cout << "\n\n   Recebido sinal de interrupção. Parando monitoramento..." << endl;
+    cout << "\n\nRecebido sinal de interrupção. Parando monitoramento..." << endl;
 }
-
-
-// ================================
-// MAIN
-// ================================
 
 int main() {
     signal(SIGINT, signal_handler);
     signal(SIGTERM, signal_handler);
     
-    cout << "\n╔════════════════════════════════════════╗" << endl;
-    cout << "║    SISTEMA DE MONITORAMENTO - RA3     ║" << endl;
-    cout << "║  Recursos, Namespaces e Control Groups║" << endl;
-    cout << "║  Grupo 03 - Trabalho Avaliativo       ║" << endl;
-    cout << "╚════════════════════════════════════════╝" << endl;
-    cout << "\nComponente 1: Resource Profiler - ATIVO" << endl;
-    cout << "Componente 2: Namespace Analyzer - ATIVO" << endl;
-    cout << "Componente 3: Control Group Manager - ATIVO" << endl;
-    cout << "\nTodas as APIs estão integradas e funcionais!" << endl;
+    cout << "\nSISTEMA DE MONITORAMENTO - RA3" << endl;
+    cout << "Recursos, Namespaces e Control Groups" << endl;
+    cout << "Grupo 03 - Trabalho Avaliativo" << endl;
     
     int choice;
     
     do {
         showMainMenu();
-        cin >> choice;
-        cin.clear();
+        if (!(cin >> choice)) {
+            cin.clear();
+            cin.ignore(10000, '\n');
+            choice = -1;
+        }
         cin.ignore(10000, '\n');
         
         monitoring_active = true;
@@ -626,11 +635,11 @@ int main() {
                 break;
                 
             case 0:
-                cout << "\nEncerrando sistema...\n" << endl;
+                cout << "\nEncerrando sistema..." << endl;
                 break;
                 
             default:
-                cout << "   Opção inválida!\n" << endl;
+                cout << "Opção inválida!\n" << endl;
                 break;
         }
         
