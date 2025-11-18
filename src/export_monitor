@@ -3,6 +3,7 @@
 #include <iomanip>
 #include <sstream>
 
+// Exporta métricas coletadas para formato CSV
 bool export_to_csv(const std::vector<MetricsSnapshot>& snapshots, const std::string& filename) {
     std::ofstream file(filename);
     if (!file.is_open()) {
@@ -10,12 +11,12 @@ bool export_to_csv(const std::vector<MetricsSnapshot>& snapshots, const std::str
         return false;
     }
     
-    // Escrever cabeçalho
+    // Escrever cabeçalho com todas as colunas de métricas
     file << "timestamp,pid,cpu_percent,memory_rss_kb,memory_vsz_kb,"
          << "io_read_bytes,io_write_bytes,io_read_rate_bps,io_write_rate_bps,"
          << "net_rx_bytes,net_tx_bytes,threads\n";
     
-    // Escrever dados
+    // Escrever cada snapshot como uma linha no CSV
     for (const auto& snap : snapshots) {
         file << snap.timestamp << ","
              << snap.pid << ","
@@ -36,6 +37,7 @@ bool export_to_csv(const std::vector<MetricsSnapshot>& snapshots, const std::str
     return true;
 }
 
+// Exporta métricas coletadas para formato JSON estruturado
 bool export_to_json(const std::vector<MetricsSnapshot>& snapshots, const std::string& filename) {
     std::ofstream file(filename);
     if (!file.is_open()) {
@@ -43,9 +45,11 @@ bool export_to_json(const std::vector<MetricsSnapshot>& snapshots, const std::st
         return false;
     }
     
+    // Início do documento JSON
     file << "{\n";
     file << "  \"metrics\": [\n";
     
+    // Processa cada snapshot e formata como objeto JSON
     for (size_t i = 0; i < snapshots.size(); i++) {
         const auto& snap = snapshots[i];
         
@@ -53,29 +57,38 @@ bool export_to_json(const std::vector<MetricsSnapshot>& snapshots, const std::st
         file << "      \"timestamp\": \"" << snap.timestamp << "\",\n";
         file << "      \"pid\": " << snap.pid << ",\n";
         file << "      \"cpu_percent\": " << std::fixed << std::setprecision(2) << snap.cpu_percent << ",\n";
+        
+        // Sub-objeto para métricas de memória
         file << "      \"memory\": {\n";
         file << "        \"rss_kb\": " << snap.memory_rss << ",\n";
         file << "        \"vsz_kb\": " << snap.memory_vsz << "\n";
         file << "      },\n";
+        
+        // Sub-objeto para métricas de I/O
         file << "      \"io\": {\n";
         file << "        \"read_bytes\": " << snap.io_read_bytes << ",\n";
         file << "        \"write_bytes\": " << snap.io_write_bytes << ",\n";
         file << "        \"read_rate_bps\": " << std::fixed << std::setprecision(0) << snap.io_read_rate << ",\n";
         file << "        \"write_rate_bps\": " << std::fixed << std::setprecision(0) << snap.io_write_rate << "\n";
         file << "      },\n";
+        
+        // Sub-objeto para métricas de rede
         file << "      \"network\": {\n";
         file << "        \"rx_bytes\": " << snap.net_rx_bytes << ",\n";
         file << "        \"tx_bytes\": " << snap.net_tx_bytes << "\n";
         file << "      },\n";
+        
         file << "      \"threads\": " << snap.threads << "\n";
         file << "    }";
         
+        // Adiciona vírgula entre objetos, exceto no último
         if (i < snapshots.size() - 1) {
             file << ",";
         }
         file << "\n";
     }
     
+    // Fechamento do documento JSON
     file << "  ]\n";
     file << "}\n";
     

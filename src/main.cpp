@@ -25,18 +25,22 @@
 
 using namespace std;
 
+// Variável atômica para controle global do monitoramento (permite parada graciosa)
 atomic<bool> monitoring_active{true};
 
+// Classe principal para perfilagem de recursos de processos
 class ResourceProfiler {
 private:
-    ProcStats prev_stats;
+    ProcStats prev_stats;  // Estatísticas da iteração anterior para cálculo de taxas
     
+    // Verifica se um processo com o PID especificado existe no sistema
     bool pidExists(int pid) {
         string proc_path = "/proc/" + to_string(pid);
         struct stat info;
         return (stat(proc_path.c_str(), &info) == 0);
     }
     
+    // Verifica se temos permissão para acessar as informações do processo
     bool canAccessProcess(int pid) {
         string stat_path = "/proc/" + to_string(pid) + "/stat";
         ifstream file(stat_path);
@@ -47,6 +51,7 @@ private:
         return true;
     }
 
+    // Converte códigos de erro semânticos em mensagens descritivas
     string getErrorDescription(int error_code) {
         switch (error_code) {
             case ERR_PROCESS_NOT_FOUND:
@@ -61,6 +66,7 @@ private:
     }
 
 public:
+    // Valida completamente o acesso a um processo antes de iniciar monitoramento
     bool validateProcessAccess(int pid) {
         if (pid <= 0) {
             throw invalid_argument("PID inválido: " + to_string(pid));
@@ -78,22 +84,26 @@ public:
         return true;
     }
     
+    // Função principal de monitoramento de processo
     bool monitorProcess(int pid, int duration_sec, int interval_sec, const string& csv_file) {
         try {
             cout << "\nValidando acesso ao processo " << pid << "..." << endl;
             validateProcessAccess(pid);
             cout << "Acesso validado com sucesso\n" << endl;
             
+            // Abre arquivo CSV para gravação dos dados
             ofstream csv(csv_file);
             if (!csv.is_open()) {
                 throw runtime_error("Não foi possível criar arquivo: " + csv_file);
             }
             
+            // Escreve cabeçalho do CSV com todas as métricas
             csv << "timestamp,pid,cpu_percent,memory_rss_bytes,memory_vsz_bytes,"
                 << "memory_swap_bytes,io_read_bytes,io_write_bytes,io_read_rate_bps,"
                 << "io_write_rate_bps,threads,minor_faults,major_faults,tcp_connections\n";
             csv.flush();
             
+            // Coleta estatísticas iniciais para baseline
             ProcStats initial_stats;
             int cpu_result = get_cpu_usage(pid, initial_stats);
             if (cpu_result < 0) {
@@ -112,6 +122,7 @@ public:
             
             prev_stats = initial_stats;
             
+            // Informações iniciais para o usuário
             cout << "Monitorando processo PID: " << pid << endl;
             cout << "Duração: " << duration_sec << " segundos" << endl;
             cout << "Intervalo: " << interval_sec << " segundos" << endl;
@@ -122,23 +133,27 @@ public:
             auto start = chrono::steady_clock::now();
             int iteration = 0;
             int error_count = 0;
-            const int MAX_ERRORS = 3;
+            const int MAX_ERRORS = 3;  // Máximo de erros consecutivos antes de parar
             
+            // Loop principal de monitoramento
             while (monitoring_active && error_count < MAX_ERRORS) {
                 auto now = chrono::steady_clock::now();
                 auto elapsed = chrono::duration_cast<chrono::seconds>(now - start).count();
                 
+                // Verifica se atingiu o tempo máximo de monitoramento
                 if (elapsed >= duration_sec) {
                     break;
                 }
                 
                 try {
+                    // Verifica se processo ainda existe
                     if (!pidExists(pid)) {
                         throw runtime_error("Processo " + to_string(pid) + " não existe mais");
                     }
                     
                     ProcStats curr_stats;
                     
+                    // Coleta todas as métricas do processo
                     cpu_result = get_cpu_usage(pid, curr_stats);
                     if (cpu_result < 0) {
                         throw runtime_error("Erro CPU: " + getErrorDescription(cpu_result));
@@ -154,21 +169,25 @@ public:
                         throw runtime_error("Erro I/O: " + getErrorDescription(io_result));
                     }
                     
+                    // Rede é opcional (pode falhar sem parar monitoramento)
                     int network_result = get_network_usage(pid, curr_stats);
                     if (network_result < 0) {
                         curr_stats.tcp_connections = 0;
                     }
                     
+                    // Calcula métricas derivadas (taxas)
                     double cpu_pct = calculate_cpu_percent(prev_stats, curr_stats, interval_sec);
                     calculate_io_rate(prev_stats, curr_stats, interval_sec);
                     
+                    // Obtém timestamp atual formatado
                     auto time_now = chrono::system_clock::now();
                     time_t t = chrono::system_clock::to_time_t(time_now);
                     struct tm tm_buf;
-                    localtime_r(&t, &tm_buf);
+                    localtime_r(&t, &tm_buf);  // Thread-safe
                     stringstream timestamp;
                     timestamp << put_time(&tm_buf, "%Y-%m-%d %H:%M:%S");
                     
+                    // Grava linha completa no CSV
                     csv << timestamp.str() << ","
                         << pid << ","
                         << fixed << setprecision(2) << cpu_pct << ","
@@ -185,6 +204,7 @@ public:
                         << curr_stats.tcp_connections << "\n";
                     csv.flush();
                     
+                    // Exibe resumo no console
                     cout << "[" << timestamp.str() << "] "
                          << "CPU: " << setw(6) << fixed << setprecision(2) << cpu_pct << "% | "
                          << "RSS: " << setw(6) << (curr_stats.memory_rss / 1024) << "MB | "
@@ -194,29 +214,34 @@ public:
                     
                     prev_stats = curr_stats;
                     iteration++;
-                    error_count = 0;
+                    error_count = 0;  // Reset contador de erros em caso de sucesso
                     
                 } catch (const exception& e) {
                     error_count++;
                     cerr << "Erro iteração " << iteration + 1 << " (" << error_count << "/" << MAX_ERRORS << "): " << e.what() << endl;
                     
+                    // Para imediatamente se processo não existir mais
                     if (string(e.what()).find("não existe") != string::npos) {
                         break;
                     }
                     
+                    // Para após muitos erros consecutivos
                     if (error_count >= MAX_ERRORS) {
                         cerr << "Muitos erros consecutivos. Parando monitoramento." << endl;
                         break;
                     }
                     
+                    // Pequena pausa antes de tentar novamente
                     this_thread::sleep_for(chrono::seconds(2));
                 }
                 
+                // Aguarda intervalo configurado
                 this_thread::sleep_for(chrono::seconds(interval_sec));
             }
             
             csv.close();
             
+            // Relatório final
             cout << "----------------------------------------" << endl;
             if (error_count >= MAX_ERRORS) {
                 cout << "Monitoramento interrompido devido a múltiplos erros" << endl;
@@ -235,10 +260,12 @@ public:
     }
 };
 
+// Wrapper para o Control Group Manager com funcionalidades específicas dos experimentos
 class ControlGroupManagerWrapper {
 private:
     CGroupManager mgr;
     
+    // Verifica se o programa está sendo executado com privilégios de root
     void checkRootPermissions() {
         if (geteuid() != 0) {
             throw runtime_error("Este experimento requer privilégios de root. Execute com 'sudo ./bin/resource-monitor'");
@@ -246,6 +273,7 @@ private:
     }
     
 public:
+    // Experimento 3: Teste de throttling de CPU com diferentes limites
     bool runCPUThrottlingExperiment() {
         try {
             cout << "\nEXPERIMENTO 3: THROTTLING DE CPU" << endl;
@@ -259,6 +287,7 @@ public:
                 throw runtime_error("Falha ao criar cgroup " + cgroup);
             }
             
+            // Testa diferentes limites de CPU
             vector<double> limits = {0.25, 0.5, 1.0, 2.0};
             
             cout << "\nTestando limites de CPU:" << endl;
@@ -294,6 +323,7 @@ public:
         }
     }
     
+    // Experimento 4: Teste de limitação de memória
     bool runMemoryLimitExperiment() {
         try {
             cout << "\nEXPERIMENTO 4: LIMITAÇÃO DE MEMÓRIA" << endl;
@@ -338,6 +368,7 @@ public:
         }
     }
     
+    // Experimento 5: Teste de limitação de I/O (executa binário externo)
     bool runIOLimitExperiment() {
         try {
             cout << "\nEXPERIMENTO 5: LIMITAÇÃO DE I/O" << endl;
@@ -347,11 +378,13 @@ public:
             cout << "\nExecutando benchmark de I/O em C++..." << endl;
             cout << "Isso pode levar alguns minutos..." << endl;
             
+            // Verifica se o binário do experimento existe
             ifstream bin_file("./bin/experimento5_limitacao_io");
             if (!bin_file.good()) {
                 throw runtime_error("Binário do experimento 5 não encontrado. Compile com 'make all'");
             }
             
+            // Executa o experimento específico de I/O
             int ret = system("sudo ./bin/experimento5_limitacao_io");
             if (ret != 0) {
                 throw runtime_error("Experimento 5 retornou código: " + to_string(ret));
@@ -367,6 +400,7 @@ public:
     }
 };
 
+// Menu interativo para o Resource Profiler (Componente 1)
 void resourceProfilerMenu() {
     ResourceProfiler profiler;
     int pid, duration, interval;
@@ -399,6 +433,7 @@ void resourceProfilerMenu() {
     profiler.monitorProcess(pid, duration, interval, filename);
 }
 
+// Menu interativo para o Namespace Analyzer (Componente 2)
 void namespaceAnalyzerMenu() {
     int choice, pid, pid1, pid2;
 
@@ -469,6 +504,7 @@ void namespaceAnalyzerMenu() {
     }
 }
 
+// Menu interativo para o Control Group Manager (Componente 3)
 void controlGroupManagerMenu() {
     ControlGroupManagerWrapper cgroup_mgr;
     int choice;
@@ -505,6 +541,7 @@ void controlGroupManagerMenu() {
     }
 }
 
+// Menu central para acesso a todos os experimentos
 void experimentsMenu() {
     int choice;
     
@@ -579,6 +616,7 @@ void experimentsMenu() {
     }
 }
 
+// Exibe o menu principal do sistema
 void showMainMenu() {
     cout << "\nSISTEMA DE MONITORAMENTO - RA3" << endl;
     cout << "------------------------------" << endl;
@@ -590,22 +628,27 @@ void showMainMenu() {
     cout << "\nEscolha uma opção: ";
 }
 
+// Manipulador de sinais para parada graciosa do monitoramento
 void signal_handler(int sig) {
     (void)sig;
     monitoring_active = false;
     cout << "\n\nRecebido sinal de interrupção. Parando monitoramento..." << endl;
 }
 
+// Função principal - ponto de entrada do programa
 int main() {
+    // Configura handlers para sinais de interrupção e término
     signal(SIGINT, signal_handler);
     signal(SIGTERM, signal_handler);
     
+    // Cabeçalho inicial
     cout << "\nSISTEMA DE MONITORAMENTO - RA3" << endl;
     cout << "Recursos, Namespaces e Control Groups" << endl;
     cout << "Grupo 03 - Trabalho Avaliativo" << endl;
     
     int choice;
     
+    // Loop principal do menu
     do {
         showMainMenu();
         if (!(cin >> choice)) {
@@ -615,7 +658,7 @@ int main() {
         }
         cin.ignore(10000, '\n');
         
-        monitoring_active = true;
+        monitoring_active = true;  // Reset flag para nova operação
         
         switch (choice) {
             case 1:
@@ -643,6 +686,7 @@ int main() {
                 break;
         }
         
+        // Pausa para leitura do usuário entre operações
         if (choice != 0 && choice >= 1 && choice <= 4) {
             cout << "\nPressione Enter para continuar...";
             cin.get();

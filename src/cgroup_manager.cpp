@@ -11,6 +11,7 @@
 #include <vector>
 #include <algorithm>
 
+// Construtor: inicializa o caminho base do cgroup detectando automaticamente a versão
 CGroupManager::CGroupManager() {
     base_path = "/sys/fs/cgroup";
     if (is_cgroup_v2()) {
@@ -18,18 +19,22 @@ CGroupManager::CGroupManager() {
     }
 }
 
+// Destrutor
 CGroupManager::~CGroupManager() {
     // Destructor
 }
 
+// Define um caminho base personalizado para os cgroups
 void CGroupManager::set_base_path(const std::string& path) {
     base_path = path;
 }
 
+// Retorna o caminho base atual dos cgroups
 std::string CGroupManager::get_base_path() const {
     return base_path;
 }
 
+// Cria um novo cgroup no caminho especificado
 bool CGroupManager::create_cgroup(const std::string& cgroup_path) {
     std::string full_path = base_path + cgroup_path;
     
@@ -43,10 +48,11 @@ bool CGroupManager::create_cgroup(const std::string& cgroup_path) {
     }
 }
 
+// Remove um cgroup existente, movendo primeiro todos os processos para a raiz
 bool CGroupManager::delete_cgroup(const std::string& cgroup_path) {
     std::string full_path = base_path + cgroup_path;
     
-    // Remover todos os processos primeiro
+    // Remover todos os processos primeiro para evitar processos órfãos
     std::string procs_file = full_path + "/cgroup.procs";
     std::ifstream procs(procs_file);
     if (procs.is_open()) {
@@ -68,12 +74,14 @@ bool CGroupManager::delete_cgroup(const std::string& cgroup_path) {
     }
 }
 
+// Verifica se um cgroup existe no sistema de arquivos
 bool CGroupManager::exists_cgroup(const std::string& cgroup_path) {
     std::string full_path = base_path + cgroup_path;
     struct stat st;
     return stat(full_path.c_str(), &st) == 0 && S_ISDIR(st.st_mode);
 }
 
+// Move um processo específico para um cgroup
 bool CGroupManager::move_process_to_cgroup(int pid, const std::string& cgroup_path) {
     std::string full_path = base_path + cgroup_path + "/cgroup.procs";
     std::ofstream file(full_path);
@@ -90,14 +98,17 @@ bool CGroupManager::move_process_to_cgroup(int pid, const std::string& cgroup_pa
     return true;
 }
 
+// Move o processo atual para um cgroup (convenience method)
 bool CGroupManager::move_current_process_to_cgroup(const std::string& cgroup_path) {
     return move_process_to_cgroup(getpid(), cgroup_path);
 }
 
+// Define limite de CPU para um cgroup (em núcleos)
 bool CGroupManager::set_cpu_limit(const std::string& cgroup_path, double cores) {
     std::string full_path = base_path + cgroup_path;
     
     if (is_cgroup_v2()) {
+        // CGroup v2: usa arquivo cpu.max com formato "quota period"
         std::string cpu_max_file = full_path + "/cpu.max";
         std::ofstream file(cpu_max_file);
         
@@ -110,6 +121,7 @@ bool CGroupManager::set_cpu_limit(const std::string& cgroup_path, double cores) 
         file << max_quota << " 100000";
         file.close();
     } else {
+        // CGroup v1: usa arquivos separados para quota e period
         std::string quota_file = full_path + "/cpu.cfs_quota_us";
         std::string period_file = full_path + "/cpu.cfs_period_us";
         
@@ -136,11 +148,13 @@ bool CGroupManager::set_cpu_limit(const std::string& cgroup_path, double cores) 
     return true;
 }
 
+// Lê o uso acumulado de CPU de um cgroup (em segundos)
 double CGroupManager::read_cpu_usage(const std::string& cgroup_path) {
     std::string full_path = base_path + cgroup_path;
     std::string usage_file;
     
     if (is_cgroup_v2()) {
+        // CGroup v2: extrai usage_usec do arquivo cpu.stat
         usage_file = full_path + "/cpu.stat";
         std::ifstream file(usage_file);
         
@@ -164,6 +178,7 @@ double CGroupManager::read_cpu_usage(const std::string& cgroup_path) {
         file.close();
         return usage_usec / 1000000.0;
     } else {
+        // CGroup v1: lê uso direto do arquivo cpuacct.usage (nanosegundos)
         usage_file = full_path + "/cpuacct.usage";
         std::ifstream file(usage_file);
         
@@ -180,6 +195,7 @@ double CGroupManager::read_cpu_usage(const std::string& cgroup_path) {
     }
 }
 
+// Define limite máximo de memória para um cgroup (em MB)
 bool CGroupManager::set_memory_limit(const std::string& cgroup_path, size_t limit_mb) {
     std::string full_path = base_path + cgroup_path;
     std::string limit_file;
@@ -203,6 +219,7 @@ bool CGroupManager::set_memory_limit(const std::string& cgroup_path, size_t limi
     return true;
 }
 
+// Lê o uso atual de memória de um cgroup (em MB)
 size_t CGroupManager::read_memory_usage(const std::string& cgroup_path) {
     std::string full_path = base_path + cgroup_path;
     std::string usage_file;
@@ -226,6 +243,7 @@ size_t CGroupManager::read_memory_usage(const std::string& cgroup_path) {
     return usage / (1024 * 1024);
 }
 
+// Define limite máximo de PIDs para um cgroup
 bool CGroupManager::set_pids_limit(const std::string& cgroup_path, int max_pids) {
     std::string full_path = base_path + cgroup_path;
     std::string pids_max_file;
@@ -249,6 +267,7 @@ bool CGroupManager::set_pids_limit(const std::string& cgroup_path, int max_pids)
     return true;
 }
 
+// Lê o número atual de PIDs em um cgroup
 int CGroupManager::read_pids_current(const std::string& cgroup_path) {
     std::string full_path = base_path + cgroup_path;
     std::string pids_current_file;
@@ -272,6 +291,7 @@ int CGroupManager::read_pids_current(const std::string& cgroup_path) {
     return current;
 }
 
+// Lê o limite máximo configurado de PIDs para um cgroup
 int CGroupManager::read_pids_max(const std::string& cgroup_path) {
     std::string full_path = base_path + cgroup_path;
     std::string pids_max_file;
@@ -299,6 +319,7 @@ int CGroupManager::read_pids_max(const std::string& cgroup_path) {
     return std::stoi(value);
 }
 
+// Lê estatísticas de pressão de CPU (PSI - Pressure Stall Information)
 PressureStats CGroupManager::read_cpu_pressure(const std::string& cgroup_path) {
     PressureStats stats = {0, 0, 0, 0};
     std::string full_path = base_path + cgroup_path;
@@ -329,6 +350,7 @@ PressureStats CGroupManager::read_cpu_pressure(const std::string& cgroup_path) {
     return stats;
 }
 
+// Lê estatísticas de pressão de memória (PSI)
 PressureStats CGroupManager::read_memory_pressure(const std::string& cgroup_path) {
     PressureStats stats = {0, 0, 0, 0};
     std::string full_path = base_path + cgroup_path;
@@ -359,6 +381,7 @@ PressureStats CGroupManager::read_memory_pressure(const std::string& cgroup_path
     return stats;
 }
 
+// Lê estatísticas de pressão de I/O (PSI)
 PressureStats CGroupManager::read_io_pressure(const std::string& cgroup_path) {
     PressureStats stats = {0, 0, 0, 0};
     std::string full_path = base_path + cgroup_path;
@@ -389,6 +412,7 @@ PressureStats CGroupManager::read_io_pressure(const std::string& cgroup_path) {
     return stats;
 }
 
+// Imprime estatísticas de pressão de forma formatada
 void CGroupManager::print_pressure(const PressureStats& p, const std::string& type) {
     std::cout << " " << type << " Pressure Stall Information:\n";
     std::cout << "    10s:  " << p.avg10 << "%\n";
@@ -397,11 +421,13 @@ void CGroupManager::print_pressure(const PressureStats& p, const std::string& ty
     std::cout << "   Total: " << p.total << " microseconds\n";
 }
 
+// Detecta se o sistema está usando CGroup v2
 bool CGroupManager::is_cgroup_v2() {
     struct stat st;
     return stat("/sys/fs/cgroup/cgroup.controllers", &st) == 0;
 }
 
+// Obtém o cgroup atual de um processo específico
 std::string CGroupManager::get_current_cgroup(int pid) {
     if (pid == 0) pid = getpid();
     
@@ -415,11 +441,13 @@ std::string CGroupManager::get_current_cgroup(int pid) {
     std::string line;
     if (std::getline(file, line)) {
         if (is_cgroup_v2()) {
+            // CGroup v2: formato diferente, busca por "::"
             size_t pos = line.find("::");
             if (pos != std::string::npos) {
                 return line.substr(pos + 2);
             }
         } else {
+            // CGroup v1: último campo após os dois pontos
             std::istringstream iss(line);
             std::string part;
             while (std::getline(iss, part, ':')) {}
@@ -430,6 +458,7 @@ std::string CGroupManager::get_current_cgroup(int pid) {
     return "";
 }
 
+// Exibe estatísticas completas de um cgroup no console
 void CGroupManager::display_cgroup_stats(const std::string& cgroup_path) {
     std::cout << "\n ESTATÍSTICAS DO CGROUP: " << cgroup_path << std::endl;
     std::cout << "=========================================" << std::endl;
@@ -448,6 +477,7 @@ void CGroupManager::display_cgroup_stats(const std::string& cgroup_path) {
     }
     std::cout << std::endl;
     
+    // PSI só disponível no CGroup v2
     if (is_cgroup_v2()) {
         PressureStats cpu_pressure = read_cpu_pressure(cgroup_path);
         print_pressure(cpu_pressure, "CPU");
@@ -459,6 +489,7 @@ void CGroupManager::display_cgroup_stats(const std::string& cgroup_path) {
     std::cout << "=========================================\n" << std::endl;
 }
 
+// Gera um relatório detalhado de utilização em arquivo texto
 void CGroupManager::generate_utilization_report(const std::string& cgroup_path, const std::string& filename) {
     std::ofstream report(filename);
     
@@ -490,6 +521,7 @@ void CGroupManager::generate_utilization_report(const std::string& cgroup_path, 
     report << "Processos Atuais: " << pids_current << "\n";
     report << "Limite de PIDs: " << (pids_max == -1 ? "ilimitado" : std::to_string(pids_max)) << "\n";
     
+    // Inclui PSI apenas para CGroup v2
     if (is_cgroup_v2()) {
         report << "\nPRESSURE STALL INFORMATION:\n";
         
@@ -512,6 +544,7 @@ void CGroupManager::generate_utilization_report(const std::string& cgroup_path, 
     std::cout << " Relatório gerado: " << filename << std::endl;
 }
 
+// Executa teste completo de limitação de PIDs
 bool CGroupManager::run_pid_limit_test(const std::string& test_cgroup, int max_pids) {
     std::cout << "\n INICIANDO TESTE DE LIMITAÇÃO DE PIDs\n";
     std::cout << "=========================================\n";
@@ -543,6 +576,7 @@ bool CGroupManager::run_pid_limit_test(const std::string& test_cgroup, int max_p
 }
 
 // Implementações vazias para remover warnings (sem redefinição)
+// Estas funções são declaradas no header mas não implementadas
 bool CGroupManager::set_cpu_quota(const std::string& cgroup_path, int quota_us, int period_us) {
     (void)cgroup_path;
     (void)quota_us;
