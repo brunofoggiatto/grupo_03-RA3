@@ -278,7 +278,7 @@ std::vector<pid_t> find_processes_in_namespace(NamespaceType ns_type, ino_t ns_i
     closedir(proc_dir);
     return pids;
 }
-
+// ================================
 // ================================
 // FUNÇÃO PRINCIPAL 3: compare_namespaces
 // Propósito: Compara namespaces de dois processos
@@ -298,9 +298,15 @@ std::optional<NamespaceComparison> compare_namespaces(pid_t pid1, pid_t pid2) {
         return std::nullopt;
     }
 
-    NamespaceComparison comparison;
-    comparison.pid1 = pid1;
-    comparison.pid2 = pid2;
+    // CORREÇÃO: Inicializar todos os membros da estrutura
+    NamespaceComparison comparison = {
+        .pid1 = pid1,
+        .pid2 = pid2,
+        .total_namespaces = 0,
+        .shared_namespaces = 0,
+        .different_namespaces = 0,
+        .differences = {}
+    };
 
     // ================================
     // COMPARAR CADA TIPO DE NAMESPACE

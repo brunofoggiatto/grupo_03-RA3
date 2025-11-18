@@ -201,8 +201,8 @@ int main() {
 // ============================================================
 //
 // REQUISITOS:
-// - Compilar com: g++ -std=c++23 -o experimento2_test_namespaces \
-//                      tests/experimento2_test_namespaces.cpp \
+// - Compilar com: g++ -std=c++23 -o experimento2_test_namespaces
+//                      tests/experimento2_test_namespaces.cpp
 //                      src/namespace_analyzer.cpp
 // - Executar: ./experimento2_test_namespaces
 // - Não requer root (apenas leitura de /proc)
