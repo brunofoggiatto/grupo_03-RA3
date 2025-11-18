@@ -10,12 +10,22 @@
 // RESPONSABILIDADE: Aluno 4
 // ============================================================
 
+// INCLUDES NECESSÁRIOS ADICIONADOS
+#include <iostream>
+#include <vector>
+#include <cstddef>      // Para size_t
+#include <cstdlib>      // Para malloc, free
+#include <cstring>      // Para memset
+#include <fstream>      // Para ofstream
+
+using namespace std;
+
 // ================================
 // FUNÇÃO SIMULADA: create_cgroup_with_limit
 // Propósito: Placeholder para criar cgroup com limite
 // ================================
 void create_cgroup_with_limit(size_t limit_mb) {
-    std::cout << "Creating cgroup with memory limit: " << limit_mb << " MB\n";
+    cout << "Creating cgroup with memory limit: " << limit_mb << " MB\n";
     // Em produção: cgm.create_cgroup(path); cgm.set_memory_limit(path, limit_mb);
 }
 
@@ -35,7 +45,7 @@ int read_memory_failcnt() {
 // Propósito: Placeholder para limpar cgroup
 // ================================
 void cleanup_cgroup() {
-    std::cout << "Cleaning up cgroup\n";
+    cout << "Cleaning up cgroup\n";
     // Em produção: cgm.delete_cgroup(path);
 }
 
@@ -77,7 +87,7 @@ MemResult test_mem_limit(size_t limit_mb, int iterations = 10) {
         // Aloca blocos de 1MB até atingir limite ou falha
         
         size_t allocated = 0;  // Memória alocada (em MB)
-        std::vector<void*> allocations;  // Ponteiros dos blocos
+        vector<void*> allocations;  // Ponteiros dos blocos
         
         // Loop: aloca enquanto consegue e até limite + 50MB
         while (allocated < limit_mb + 50) {
@@ -135,10 +145,10 @@ MemResult test_mem_limit(size_t limit_mb, int iterations = 10) {
 // ================================
 int main() {
     // Vetor para armazenar resultados
-    std::vector<MemResult> results;
+    vector<MemResult> results;
     
     // Cabeçalho
-    std::cout << "Iniciando Experimento 4 - Limitação de Memória\n";
+    cout << "Iniciando Experimento 4 - Limitação de Memória\n";
     
     // ================================
     // EXECUTAR TESTES COM DIFERENTES LIMITES
@@ -152,7 +162,7 @@ int main() {
     // ================================
     // GERAR RELATÓRIO CSV
     // ================================
-    std::ofstream csv("experimento4_results.csv");
+    ofstream csv("experimento4_results.csv");
     csv << "limite_mb,alocado_mb,oom_count,failcnt\n";  // Cabeçalho
     
     for (auto& r : results) {
@@ -166,17 +176,17 @@ int main() {
     // ================================
     // EXIBIR TABELA NO CONSOLE
     // ================================
-    std::cout << "\n=== RESULTADOS EXPERIMENTO 4 ===\n";
-    std::cout << "Limite\tAlocado\tOOM\tFailcnt\n";
+    cout << "\n=== RESULTADOS EXPERIMENTO 4 ===\n";
+    cout << "Limite\tAlocado\tOOM\tFailcnt\n";
     
     for (auto& r : results) {
-        std::cout << r.limit_mb << " MB\t"  // Limite
-                  << r.allocated_mb << " MB\t"  // Alocado
-                  << r.oom_count << "\t"        // OOM kills
-                  << r.failcnt << "\n";         // Falhas
+        cout << r.limit_mb << " MB\t"  // Limite
+             << r.allocated_mb << " MB\t"  // Alocado
+             << r.oom_count << "\t"        // OOM kills
+             << r.failcnt << "\n";         // Falhas
     }
 
     // Mensagem final
-    std::cout << "\n Experimento 4 concluído! Resultados salvos em experimento4_results.csv\n";
+    cout << "\n Experimento 4 concluído! Resultados salvos em experimento4_results.csv\n";
     return 0;
 }
